@@ -657,7 +657,8 @@
           "priority": "Priority",
           "priorityTip": "Can be used for search sorting",
           "offline": "Site is offline (downtime\/shutdown)",
-          "timezone": "Timezone"
+          "timezone": "Timezone",
+          "disableMessageCount": "Display message count"
         },
         "index": {
           "importAll": "One-click import site",
@@ -733,8 +734,11 @@
       "seedingDataSubTitle": "Seeding size: {seedingSize}, count: {count}",
       "seedingSize": "Seeding size",
       "seedingCount": "Seeding count",
+      "barDataTitle": "[{userName}@{site}] Upload Data",
       "size": "Size",
       "count": "Count",
+      "total": "Total",
+      "percent": "Percent",
       "note": "Note: <br>1. Chart history data comes from the overview page, manual or automatic update will be recorded; <br>2. Each tracker only saves one per day;",
       "dateRange": {
         "7day": "7 days",
