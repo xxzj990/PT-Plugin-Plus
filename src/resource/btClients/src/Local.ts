@@ -6,7 +6,7 @@
 import {
   CTorrent,
   BittorrentClientBaseConfig,
-  TorrentClientMetaData
+  TorrentClientMetaData, TorrentClientStatus
 } from '../types';
 import AbstractBittorrentClient from '@/resource/btClients/AbstractBittorrentClient';
 
@@ -18,7 +18,7 @@ export const clientConfig: BittorrentClientBaseConfig = {
 };
 
 export const clientMetaData: TorrentClientMetaData = {
-  description: '这是一个由PTPP内部调用的Fake BtClient，目的是用作种子下载客户端',
+  description: '这是一个供PTPP内部调用的Fake BtClient，目的是用作种子下载客户端',
   feature: {
     CustomPath: { allowed: false }
   }
@@ -29,6 +29,10 @@ export default class Local extends AbstractBittorrentClient {
 
   async ping (): Promise<boolean> {
     return true;
+  }
+
+  async getClientStatus (): Promise<TorrentClientStatus> {
+    throw new Error('Not Support');
   }
 
   addTorrent (): Promise<boolean> {

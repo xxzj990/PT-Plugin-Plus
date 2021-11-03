@@ -2,7 +2,7 @@ import {
   BittorrentClientBaseConfig,
   CAddTorrentOptions,
   CTorrent,
-  CTorrentFilterRules
+  CTorrentFilterRules, TorrentClientStatus
 } from './types';
 
 import { Buffer } from 'buffer';
@@ -47,7 +47,7 @@ export default abstract class AbstractBittorrentClient<T extends BittorrentClien
        * 但响应头值不是 application/x-bittorrent 或 application/octet-stream，
        * 则我们认为非正常的种子：
        */
-      (req.headers['content-type'] && !/octet-stream|x-bittorrent/gi.test(req.headers['content-type']))
+      req.headers['content-type'] && !/octet-stream|x-bittorrent/gi.test(req.headers['content-type'])
     ) {
       throw new Error('Invalid Torrent From Server');
     }
@@ -95,6 +95,11 @@ export default abstract class AbstractBittorrentClient<T extends BittorrentClien
    *
    */
   public abstract getAllTorrents(): Promise<CTorrent[]>
+
+  /**
+   * 获取客户端状态的方法
+   */
+  public abstract getClientStatus(): Promise<TorrentClientStatus>
 
   public async getTorrentsBy (filter: CTorrentFilterRules): Promise<CTorrent[]> {
     let torrents = await this.getAllTorrents();
