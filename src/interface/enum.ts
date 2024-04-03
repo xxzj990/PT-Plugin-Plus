@@ -12,6 +12,14 @@ export enum ESizeUnit {
 }
 
 /**
+ * 数据请求类型
+ */
+export enum ERequestType {
+  JSON = "json",
+  TEXT = "urlencode"
+}
+
+/**
  * 数据请求返回类型
  */
 export enum ERequestResultType {
@@ -390,7 +398,7 @@ export enum EPluginPosition {
  * 相关Wiki链接
  */
 export enum EWikiLink {
-  faq = "https://github.com/ronggang/PT-Plugin-Plus/wiki/frequently-asked-questions"
+  faq = "https://github.com/pt-plugins/PT-Plugin-Plus/wiki/frequently-asked-questions"
 }
 
 /**
@@ -438,3 +446,21 @@ export enum ERestoreError {
   needSecretKey = "needSecretKey",
   errorSecretKey = "errorSecretKey"
 }
+
+export enum ETagType {
+  all = "__all__",
+  unTagged = "__unTagged__",
+  unReadMsg = "__unReadMsg__",
+  statusError = "__statusError__",
+}
+
+export enum EOpenType {
+  openAllSites = "openAllSites",
+  openAllUnReadMsg = "openAllUnReadMsg",
+  openAllStatusErr = "openAllStatusErr",
+}
+
+export enum EAlarm {
+  refreshJob = 'PTPP_RefreshUserData_JOB'
+}
+

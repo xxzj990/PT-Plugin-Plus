@@ -22,7 +22,7 @@
 
       return this.getFullURL(url);
     }
-    
+
     showTorrentSize() {
       let size = PTService.filters.formatSize(PTService.getFieldValue("size"));
       PTService.addButton({
@@ -37,6 +37,31 @@
     getTitle() {
       return PTService.getFieldValue("title") || $("title").text();
     }
+
+    /**
+     * 获取当前种子IMDb Id
+     */
+    getIMDbId() {
+      let url = window.location.href
+      let imdbId = null
+      try {
+        imdbId = PTService.getFieldValue('imdbId')
+        if (!imdbId) {
+          const link = $('a[href*=\'www.imdb.com/title/\']:first');
+          if (link.length > 0) {
+            let match = link.attr('href').match(/(tt\d+)/)
+            if (match && match.length >= 2) {
+              imdbId = match[1];
+            }
+          }
+        }
+      } catch (e) {
+        console.log(`${url} 获取IMDb Id 失败`, e)
+      }
+      console.log(imdbId)
+      return imdbId
+    }
   }
+
   new App().init();
 })(jQuery, window);

@@ -152,7 +152,7 @@ class PTPContent {
 
     let site = sites.find((item: Site) => {
       let cdn = [item.url].concat(item.cdn);
-      return item.host == host || cdn.join("").indexOf(host) > -1;
+      return item.host == host || cdn.join("").indexOf(`//${host}`) > -1;
     });
 
     if (site) {
@@ -1021,6 +1021,16 @@ class PTPContent {
     }
 
     return this.infoParser.getFieldData(content, selector, this.pageSelector);
+  }
+
+  public resolveMTDownloadURL(id: String, showNotice: boolean = true, site: Site = this.site) {
+    if (!site.authToken) return this.showNotice({msg: "未设置AuthToken，请先设置AuthToken", type: "error"})
+    if (!id) return this.showNotice({msg: "种子 id 不能为空", type: "error"})
+    if (showNotice) {
+      return PPF.resolveMTDownloadURL(id, this.site, this.showNotice)
+    } else {
+      return PPF.resolveMTDownloadURL(id, this.site)
+    }
   }
 }
 

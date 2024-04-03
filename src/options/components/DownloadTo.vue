@@ -196,13 +196,16 @@ export default Vue.extend({
             fn: () => {
               if (options.url) {
                 console.log(options, item);
+                let url = this.processURLWithPrefix("m-teamdetail", options.site,options.url);
                 const downloadOptions = {
-                  url: options.url,
+                  url: url,
                   title: options.title,
                   savePath: item.path,
                   autoStart: item.client.autoStart,
+                  tagIMDb: item.client.tagIMDb,
                   link: options.link,
-                  clientId: item.client.id
+                  clientId: item.client.id,
+                  imdbId: options.imdbId
                 };
 
                 if (this.getOptionsOnly) {
@@ -232,7 +235,14 @@ export default Vue.extend({
 
       PPF.showContextMenu(menus, event);
     },
-
+    processURLWithPrefix(prefix: string, site: Site, url?: string) {
+      if (url && url.startsWith(prefix)) {
+        const id = url.substring(prefix.length);
+        return PPF.resolveMTDownloadURL(id, site)
+      } else {
+        return url;
+      }
+    },
     /**
      * 显示批量下载时可用下载服务器菜单
      * @param event
@@ -312,7 +322,9 @@ export default Vue.extend({
           clientId: options.client.id,
           savePath: options.path,
           autoStart: options.client.autoStart,
-          link: item.link
+          tagIMDb: options.client.tagIMDb,
+          link: item.link,
+          imdbId: item.imdbId
         });
       });
 

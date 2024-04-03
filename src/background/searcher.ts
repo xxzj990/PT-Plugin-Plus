@@ -14,7 +14,8 @@ import {
   SiteCategories,
   SiteCategory,
   ERequestMethod,
-  BASE_TAG_COLORS
+  BASE_TAG_COLORS,
+  ERequestType
 } from "@/interface/common";
 import { APP } from "@/service/api";
 import { SiteService } from "./site";
@@ -99,6 +100,7 @@ export class Searcher {
         siteService.options.searchEntryConfig
       );
       let searchEntryConfigQueryString = "";
+      let searchEntryConfigRequestData:Dictionary<any>;
 
       if (siteService.options.searchEntry) {
         searchConfig.rootPath = `sites/${host}/`;
@@ -147,6 +149,7 @@ export class Searcher {
       // 将所有 . 替换为空格
       key = key.replace(/\./g, " ");
 
+      let skipSearch = false;
       // 是否有搜索入口配置项
       if (searchEntryConfig && searchEntryConfig.page) {
         siteSearchPage = searchEntryConfig.page;
@@ -170,9 +173,106 @@ export class Searcher {
                 searchEntryConfigQueryString = area.queryString;
               }
 
+              if (area.requestData)
+                searchEntryConfigRequestData = area.requestData;
+
               // 追加查询字符串
               if (area.appendQueryString) {
                 searchEntryConfigQueryString += area.appendQueryString;
+              }
+
+              // 获取TVDB的信息以支持对网站的IMDB搜索
+              if (area.name == "IMDB" && area.replaceKeyByTVDB)
+              {
+                try {
+                  $.ajax({
+                    url: "https://thetvdb.com/api/GetSeriesByRemoteID.php?imdbid=" + key,
+                    cache: true,
+                    dataType: "text",
+                    contentType: "text/plain",
+                    timeout: this.options.connectClientTimeout || 30000,
+                    method: ERequestMethod.GET,
+                    async: false
+                  }).done((result: any) => {
+                    let doc = new DOMParser().parseFromString(result, "text/html");
+                    for (var replaceKey of area.replaceKeyByTVDB as string[]) {
+                      switch (replaceKey)
+                      {
+                        case "year":
+                          let year = "";
+                          let date = $(doc).find("FirstAired").text();
+                          if (date != "")
+                          {
+                            year = new Date(date).getFullYear().toString();
+                          }
+                          searchEntryConfigQueryString = searchEntryConfigQueryString.replace("$year$", year);
+                          break;
+                        case "name":
+                          let seriesName = $(doc).find("SeriesName").text();
+                          if (seriesName != "")
+                            searchEntryConfigQueryString = searchEntryConfigQueryString.replace("$name$", seriesName);
+                          else
+                          {
+                            skipSearch = true;
+                            return;
+                          }
+                          break;
+                        default:
+                          break;
+                      }
+                    }
+                  })
+                  .fail((jqXHR, textStatus, errorThrown) => {
+                    skipSearch = true;
+                    result.type = EDataResultType.unknown;
+                    reject(result);
+                    return;
+                  });
+                }catch {
+                  skipSearch = true;
+                  result.type = EDataResultType.unknown;
+                  reject(result);
+                  return;
+                }
+              }
+
+              // 转换成ANIDB ID以支持对网站的IMDB搜索
+              if (area.name == "IMDB" && area.convertToANIDB)
+              {
+                try {
+                  $.ajax({
+                    url: "https://raw.githubusercontent.com/Anime-Lists/anime-lists/master/anime-list.xml",
+                    cache: true,
+                    dataType: "text",
+                    contentType: "text/plain",
+                    timeout: this.options.connectClientTimeout || 30000,
+                    method: ERequestMethod.GET,
+                    async: false
+                  }).done((result: any) => {
+                    let doc = $.parseHTML(result);
+                    let selector = "anime[imdbid*='" + key + "']:first";
+                    let anime = $(selector, doc);
+                    if (anime.length > 0 && key.length >= 9)
+                    {
+                      let anidbid = anime.attr("anidbid");
+                      if (anidbid)
+                        searchEntryConfigQueryString = searchEntryConfigQueryString.replace("$anidb$", anidbid);
+                    } else {
+                      skipSearch = true;
+                     }
+                  })
+                  .fail((jqXHR, textStatus, errorThrown) => {
+                    skipSearch = true;
+                    result.type = EDataResultType.unknown;
+                    reject(result);
+                    return;
+                  });
+                } catch (error) {
+                  skipSearch = true;
+                  result.type = EDataResultType.unknown;
+                  reject(result);
+                  return;
+                }
               }
 
               // 替换关键字
@@ -197,6 +297,22 @@ export class Searcher {
         }
       }
 
+      if (skipSearch) {
+        resolve({
+          status: 'success',
+          success: true,
+          msg: this.getErrorMessage(
+            site,
+            ESearchResultParseStatus.noTorrents,
+            ""
+          ),
+          data: {
+          },
+          type: EDataResultType.success
+        });
+        return;
+      }
+
       this.searchConfigs[host] = searchConfig;
 
       let results: any[] = [];
@@ -204,19 +320,20 @@ export class Searcher {
       let doneCount = 0;
 
       const KEY = "$key$";
-
-      // 转换 uri
-      key = encodeURIComponent(key);
-
+      // for some json post API
+      if (!searchEntryConfig.keepOriginKey) {
+        // 转换 uri
+        key = encodeURIComponent(key);
+      }
       // 遍历需要搜索的入口
       searchConfig.entry.forEach((entry: SearchEntry) => {
         let searchPage = entry.entry || siteSearchPage;
 
         // 当已自动匹配规则时，去除入口页面中已指定的关键字字段
         if (
-          autoMatched &&
-          searchPage.indexOf(KEY) !== -1 &&
-          searchEntryConfigQueryString.indexOf(KEY) !== -1
+            autoMatched &&
+            searchPage.indexOf(KEY) !== -1 &&
+            searchEntryConfigQueryString.indexOf(KEY) !== -1
         ) {
           searchPage = PPF.removeQueryStringFromValue(searchPage, KEY);
         }
@@ -238,22 +355,23 @@ export class Searcher {
           queryString += entry.appendQueryString;
         }
         if (searchEntryConfig) {
-          entry.parseScriptFile =
-            searchEntryConfig.parseScriptFile || entry.parseScriptFile;
-          entry.resultType = searchEntryConfig.resultType || entry.resultType;
-          entry.resultSelector =
-            searchEntryConfig.resultSelector || entry.resultSelector;
-          entry.headers = searchEntryConfig.headers || entry.headers;
-          entry.asyncParse = searchEntryConfig.asyncParse || entry.asyncParse;
-          entry.requestData = searchEntryConfig.requestData;
+          entry.parseScriptFile = searchEntryConfig.parseScriptFile || entry.parseScriptFile
+          entry.resultType = searchEntryConfig.resultType || entry.resultType
+          entry.requestDataType = searchEntryConfig.requestDataType || entry.requestDataType
+          entry.resultSelector = searchEntryConfig.resultSelector || entry.resultSelector
+          entry.headers = searchEntryConfig.headers || entry.headers
+          entry.asyncParse = searchEntryConfig.asyncParse || entry.asyncParse
+          entry.requestData = searchEntryConfigRequestData || searchEntryConfig.requestData || entry.requestData
+          // console.log("entry.requestData1", entry)
         }
 
+        // console.log("entry.requestData2", entry)
         // 判断是否指定了搜索页和用于获取搜索结果的脚本
         if (searchPage && entry.parseScriptFile && entry.enabled !== false) {
           let rows: number =
-            this.options.search && this.options.search.rows
-              ? this.options.search.rows
-              : 10;
+              this.options.search && this.options.search.rows
+                  ? this.options.search.rows
+                  : 10;
 
           // 如果有自定义地址，则使用自定义地址
           if (site.cdn && site.cdn.length > 0) {
@@ -280,11 +398,7 @@ export class Searcher {
           // 支除重复的参数
           url = PPF.removeDuplicateQueryString(url);
 
-          let searchKey =
-            key +
-            (entry.appendToSearchKeyString
-              ? ` ${entry.appendToSearchKeyString}`
-              : "");
+          let searchKey = key + (entry.appendToSearchKeyString ? ` ${entry.appendToSearchKeyString}` : "");
           url = this.replaceKeys(url, {
             key: searchKey,
             rows: rows,
@@ -297,17 +411,14 @@ export class Searcher {
               for (const key in entry.requestData) {
                 if (entry.requestData.hasOwnProperty(key)) {
                   const value = entry.requestData[key];
+                  if (typeof value !== 'string') continue
                   entry.requestData[key] = PPF.replaceKeys(value, {
                     key: searchKey,
                     passkey: site.passkey ? site.passkey : ""
                   });
 
                   if (site.user) {
-                    entry.requestData[key] = PPF.replaceKeys(
-                      value,
-                      site.user,
-                      "user"
-                    );
+                    entry.requestData[key] = PPF.replaceKeys(entry.requestData[key], site.user, "user");
                   }
                 }
               }
@@ -316,7 +427,24 @@ export class Searcher {
               this.service.debug(error);
             }
           }
+          // 替换要提交请求头中的内容
+          if (entry.headers) {
+            for (const key in entry.headers) {
+              if (entry.headers.hasOwnProperty(key)) {
+                const value = entry.headers[key];
+                entry.headers[key] = PPF.replaceKeys(value, {
+                  key: searchKey,
+                  passkey: site.passkey ? site.passkey : ""
+                });
 
+                if (site.user) {
+                  entry.headers[key] = PPF.replaceKeys(entry.headers[key], site.user, "user");
+                }
+
+                entry.headers[key] = PPF.replaceKeys(entry.headers[key], site, "site");
+              }
+            }
+          }
           // 替换用户相关信息
           if (site.user) {
             url = this.replaceKeys(url, site.user, "user");
@@ -335,84 +463,84 @@ export class Searcher {
           if (!entry.parseScript) {
             this.service.debug("searchTorrent: getScriptContent", scriptPath);
             APP.getScriptContent(scriptPath)
-              .done((script: string) => {
-                this.service.debug(
-                  "searchTorrent: getScriptContent done",
-                  scriptPath
-                );
-                this.parseScriptCache[scriptPath] = script;
-                entry.parseScript = script;
-                this.getSearchResult(
-                  url,
-                  site,
-                  Object.assign(PPF.clone(searchEntryConfig), PPF.clone(entry)),
-                  searchConfig.torrentTagSelectors
-                )
-                  .then((result: any) => {
-                    this.service.debug(
-                      "searchTorrent: getSearchResult done",
-                      url
-                    );
-                    if (result && result.length) {
-                      results.push(...result);
-                    }
-                    doneCount++;
-
-                    if (doneCount === entryCount || results.length >= rows) {
-                      resolve(results.slice(0, rows));
-                    }
-                  })
-                  .catch((result: any) => {
-                    this.service.debug(
-                      "searchTorrent: getSearchResult catch",
+                .done((script: string) => {
+                  this.service.debug(
+                      "searchTorrent: getScriptContent done",
+                      scriptPath
+                  );
+                  this.parseScriptCache[scriptPath] = script;
+                  entry.parseScript = script;
+                  this.getSearchResult(
                       url,
-                      result
-                    );
-                    doneCount++;
+                      site,
+                      Object.assign(PPF.clone(searchEntryConfig), PPF.clone(entry)),
+                      searchConfig.torrentTagSelectors
+                  )
+                      .then((result: any) => {
+                        this.service.debug(
+                            "searchTorrent: getSearchResult done",
+                            url
+                        );
+                        if (result && result.length) {
+                          results.push(...result);
+                        }
+                        doneCount++;
 
-                    if (doneCount === entryCount) {
-                      if (results.length > 0) {
-                        resolve(results.slice(0, rows));
-                      } else {
-                        reject(result);
-                      }
-                    }
-                  });
-              })
-              .fail(error => {
-                this.service.debug(
-                  "searchTorrent: getScriptContent fail",
-                  error
-                );
-              });
+                        if (doneCount === entryCount || results.length >= rows) {
+                          resolve(results.slice(0, rows));
+                        }
+                      })
+                      .catch((result: any) => {
+                        this.service.debug(
+                            "searchTorrent: getSearchResult catch",
+                            url,
+                            result
+                        );
+                        doneCount++;
+
+                        if (doneCount === entryCount) {
+                          if (results.length > 0) {
+                            resolve(results.slice(0, rows));
+                          } else {
+                            reject(result);
+                          }
+                        }
+                      });
+                })
+                .fail(error => {
+                  this.service.debug(
+                      "searchTorrent: getScriptContent fail",
+                      error
+                  );
+                });
           } else {
             this.getSearchResult(
-              url,
-              site,
-              Object.assign(PPF.clone(searchEntryConfig), PPF.clone(entry)),
-              searchConfig.torrentTagSelectors
+                url,
+                site,
+                Object.assign(PPF.clone(searchEntryConfig), PPF.clone(entry)),
+                searchConfig.torrentTagSelectors
             )
-              .then((result: any) => {
-                if (result && result.length) {
-                  results.push(...result);
-                }
-                doneCount++;
-
-                if (doneCount === entryCount || results.length >= rows) {
-                  resolve(results.slice(0, rows));
-                }
-              })
-              .catch((result: any) => {
-                doneCount++;
-
-                if (doneCount === entryCount) {
-                  if (results.length > 0) {
-                    resolve(results.slice(0, rows));
-                  } else {
-                    reject(result);
+                .then((result: any) => {
+                  if (result && result.length) {
+                    results.push(...result);
                   }
-                }
-              });
+                  doneCount++;
+
+                  if (doneCount === entryCount || results.length >= rows) {
+                    resolve(results.slice(0, rows));
+                  }
+                })
+                .catch((result: any) => {
+                  doneCount++;
+
+                  if (doneCount === entryCount) {
+                    if (results.length > 0) {
+                      resolve(results.slice(0, rows));
+                    } else {
+                      reject(result);
+                    }
+                  }
+                });
           }
         }
       });
@@ -429,7 +557,7 @@ export class Searcher {
         reject(result);
       }
 
-      this.service.debug("searchTorrent: quene done");
+      this.service.debug("searchTorrent: queue done");
     });
   }
 
@@ -452,7 +580,7 @@ export class Searcher {
         let pageParser = new PageParser(
           entry.beforeSearch,
           site,
-          this.service.options.connectClientTimeout
+          this.service.options.connectClientTimeout,
         );
         pageParser
           .getInfos()
@@ -543,23 +671,34 @@ export class Searcher {
       entry: _entry
     });
     let logId = "";
+    let contentType = 'text/plain';
+    let data: Dictionary<any> | string | undefined = entry.requestData
+    switch (entry.requestDataType) {
+      case ERequestType.JSON:
+        contentType = 'application/json';
+        if (data)
+          data = JSON.stringify(data);
+      case ERequestType.TEXT:
+      default:
+    }
     return new Promise<any>((resolve?: any, reject?: any) => {
       this.searchRequestQueue[url] = $.ajax({
         url: url,
-        cache: false,
+        cache: true,
         dataType: "text",
-        contentType: "text/plain",
+        contentType,
         timeout: this.options.connectClientTimeout || 30000,
         headers: entry.headers,
         method: entry.requestMethod || ERequestMethod.GET,
-        data: entry.requestData
+        data
       })
         .done((result: any) => {
           this.service.debug("getSearchResult.done", url);
           delete this.searchRequestQueue[url];
           if (
             (result && typeof result == "string" && result.length > 100) ||
-            typeof result == "object"
+            typeof result == "object" ||
+            (result && entry.resultType == ERequestResultType.JSON && result.toLowerCase().includes("success"))
           ) {
             let page: any;
             let doc: any;
@@ -617,6 +756,7 @@ export class Searcher {
 
             // 执行获取结果的脚本
             try {
+              console.log("entry.parseScript ", entry.parseScript?.length);
               if (entry.parseScript) {
                 // 异步脚本，由脚本负责调用 reject 和 resolve
                 if (entry.asyncParse) {

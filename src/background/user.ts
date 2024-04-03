@@ -36,18 +36,18 @@ export class User {
           return false;
         }
 
+
         if (!failedOnly) {
           requests.push(this.getUserInfo(site, true));
-        } else if (
-          site.user &&
-          ((site.user.lastUpdateStatus &&
-            [
-              EUserDataRequestStatus.needLogin,
-              EUserDataRequestStatus.unknown
-            ].includes(site.user.lastUpdateStatus)) ||
-            !site.user.lastUpdateStatus)
-        ) {
-          requests.push(this.getUserInfo(site, true));
+        } else {
+          if (site.user) {
+            let enumStatus = [EUserDataRequestStatus.needLogin, EUserDataRequestStatus.unknown]
+            // @ts-ignore
+            let lastUpdateStatus = enumStatus.includes(site.user.lastUpdateStatus)
+            if ((site.user.lastUpdateStatus && lastUpdateStatus) || !site.user.lastUpdateStatus) {
+              requests.push(this.getUserInfo(site, true))
+            }
+          }
         }
       });
 
@@ -112,7 +112,7 @@ export class User {
       }
 
       // 获取用户基本信息（用户名、ID、是否登录等）
-      this.getInfos(host, url, rule)
+      this.getInfos(host, url, rule, site)
         .then((result: any) => {
           console.log("userBaseInfo", host, result);
           userInfo = Object.assign({}, result);
@@ -130,7 +130,7 @@ export class User {
 
           if (!userInfo.isLogged) {
             userInfo.lastUpdateStatus = EUserDataRequestStatus.needLogin;
-            this.updateStatus(site, userInfo);
+            //this.updateStatus(site, userInfo);
 
             rejectFN(
               APP.createErrorMessage({
@@ -152,14 +152,16 @@ export class User {
           if (userInfo.name || userInfo.id) {
             let url = `${this.getSiteURL(site)}${rule.page
               .replace("$user.id$", userInfo.id)
-              .replace("$user.name$", userInfo.name)}`;
+              .replace("$user.name$", userInfo.name)
+              .replace("$user.bonusPage$", userInfo.bonusPage)
+              .replace("$user.unsatisfiedsPage$", userInfo.unsatisfiedsPage)}`;
             // 上次请求未完成时，直接返回最近的数据
             if (this.checkQueue(host, url)) {
               resolve(userInfo);
               return;
             }
 
-            this.getInfos(host, url, rule)
+            this.getInfos(host, url, rule, site, userInfo)
               .then((result: any) => {
                 userInfo = Object.assign(userInfo, result);
 
@@ -171,12 +173,12 @@ export class User {
               })
               .catch((error: any) => {
                 userInfo.lastUpdateStatus = EUserDataRequestStatus.unknown;
-                this.updateStatus(site, userInfo);
+                //this.updateStatus(site, userInfo);
                 rejectFN(APP.createErrorMessage(error));
               });
           } else {
             userInfo.lastUpdateStatus = EUserDataRequestStatus.unknown;
-            this.updateStatus(site, userInfo);
+            //this.updateStatus(site, userInfo);
             rejectFN(
               APP.createErrorMessage({
                 status: EUserDataRequestStatus.unknown,
@@ -187,7 +189,8 @@ export class User {
         })
         .catch((error: any) => {
           userInfo.lastUpdateStatus = EUserDataRequestStatus.unknown;
-          this.updateStatus(site, userInfo);
+          console.log("getInfos Error :",error);
+          //this.updateStatus(site, userInfo);
           rejectFN(APP.createErrorMessage(error));
         });
     });
@@ -201,16 +204,18 @@ export class User {
   public getMoreInfos(site: Site, userInfo: UserInfo): Promise<any> {
     return new Promise<any>((resolve?: any, reject?: any) => {
       let requests: any[] = [];
-      let selectors = ["userSeedingTorrents"];
+      let selectors = ["userSeedingTorrents", "bonusExtendInfo", "hnrExtendInfo", "levelExtendInfo", "userUploadedTorrents"];
 
       selectors.forEach((name: string) => {
         let host = site.host as string;
         let rule = this.service.getSiteSelector(site, name);
 
-        if (rule) {
+        if (rule&&rule.page) {
           let url = `${this.getSiteURL(site)}${rule.page
             .replace("$user.id$", userInfo.id)
-            .replace("$user.name$", userInfo.name)}`;
+            .replace("$user.name$", userInfo.name)
+            .replace("$user.bonusPage$", userInfo.bonusPage)
+            .replace("$user.unsatisfiedsPage$", userInfo.unsatisfiedsPage)}`;
           // 上次请求未完成时，跳过
           if (this.checkQueue(host, url)) {
             return;
@@ -240,7 +245,7 @@ export class User {
           .then((results: any[]) => {
             results.forEach((result: any) => {
               userInfo = Object.assign(userInfo, result);
-
+              console.log(userInfo );
               userInfo.lastUpdateStatus = EUserDataRequestStatus.success;
               this.updateStatus(site, userInfo);
             });
@@ -285,6 +290,31 @@ export class User {
           console.log(error);
         }
       }
+      let headers = rule.headers;
+      if (headers && userInfo) {
+        try {
+          for (const key in headers) {
+            if (headers.hasOwnProperty(key)) {
+              const value = headers[key];
+              headers[key] = PPF.replaceKeys(value, userInfo, "user");
+            }
+          }
+        } catch (error) {
+          console.log(error);
+        }
+      }
+      if (headers && site) {
+        try {
+          for (const key in headers) {
+            if (headers.hasOwnProperty(key)) {
+              const value = headers[key];
+              headers[key] = PPF.replaceKeys(value, site, "site");
+            }
+          }
+        } catch (error) {
+          console.log(error);
+        }
+      }
 
       /**
        * 是否有脚本解析器
@@ -300,9 +330,11 @@ export class User {
         url,
         method: rule.requestMethod || ERequestMethod.GET,
         dataType: "text",
-        data: requestData,
+        data: rule.requestContentType == "application/json" ? JSON.stringify(requestData) : requestData,
+        contentType: rule.requestContentType == "application/json" ? "application/json" : "application/x-www-form-urlencoded",
         headers: rule.headers,
-        timeout: this.service.options.connectClientTimeout || 30000
+        timeout: this.service.options.connectClientTimeout || 30000,
+        cache: (rule.dataType) && rule.dataType !== ERequestResultType.JSON ? false : true
       })
         .done(result => {
           this.removeQueue(host, url);

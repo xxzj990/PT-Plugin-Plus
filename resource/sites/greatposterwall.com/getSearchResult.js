@@ -45,8 +45,18 @@
       let site = options.site;
       let groups = options.page.response.results;
       if (groups.length == 0) {
-        options.status = ESearchResultParseStatus.noTorrents;
-        return [];
+        options.reject({
+          success: false,
+          msg: options.searcher.getErrorMessage(
+            options.site,
+            ESearchResultParseStatus.noTorrents,
+            options.errorMsg
+          ),
+          data: {
+            site: options.site,
+            isLogged: options.isLogged
+          }
+        });
       }
       let results = [];
       let authkey = this.authkey;
@@ -60,9 +70,9 @@
               let data = {
                 id: torrent.torrentId,
                 title:
-                  group.artist +
-                  " - " +
                   group.groupName +
+                  " - " +
+                  group.groupSubName +
                   " [" +
                   group.groupYear +
                   "] [" +
@@ -84,7 +94,8 @@
                   torrent.isNeutralLeech ||
                   torrent.isPersonalFreeleech
                     ? " / Freeleech"
-                    : ""),
+                    : "") +
+                  (torrent.releaseGroup ? ` / ${torrent.releaseGroup}` : ""),
                 link: `${site.url}torrents.php?id=${group.groupId}&torrentid=${torrent.torrentId}`,
                 url: `${site.url}torrents.php?action=download&id=${torrent.torrentId}&authkey=${authkey}&torrent_pass=${passkey}`,
                 size: parseFloat(torrent.size),
@@ -94,7 +105,8 @@
                 completed: torrent.snatches,
                 site: site,
                 entryName: options.entry.name,
-                category: group.releaseType
+                category: group.releaseType,
+                imdbId: group.imdbId,
               };
               results.push(data);
             });
@@ -113,7 +125,8 @@
               site: site,
               tags: group.tags,
               entryName: options.entry.name,
-              category: group.category
+              category: group.category,
+              imdbId: group.imdbId,
             };
             results.push(data);
           }

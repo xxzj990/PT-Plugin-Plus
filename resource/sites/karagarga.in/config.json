@@ -17,7 +17,16 @@
     "pages": ["/browse.php"],
     "scripts": ["/schemas/NexusPHP/common.js", "browse.js"]
   }],
-  "searchEntryConfig": {
+  "levelRequirements": [
+    {
+      "level": "1",
+      "name": "Power User",
+      "interval": "13",
+      "uploaded": "50GB",
+      "ratio": "1.05"
+    }
+  ],
+"searchEntryConfig": {
     "page": "/browse.php",
     "queryString": "search=$key$&search_type=torrent",
     "resultType": "html",
@@ -65,6 +74,10 @@
         "uploaded": {
           "selector": ["td.rowhead:contains('Uploaded') + td"],
           "filters": ["query.text().replace(/,|\\r|\\n|\\s/g,'').match(/.*?([\\d.]+ ?[ZEPTGMK]?i?B)/)", "(query && query.length>=2)?(query[1]).sizeToNumber():0"]
+        },
+        "uploads": {
+          "selector": ["td.rowhead:contains('Uploaded') + td"],
+          "filters": ["query.text().replace(/,/g, '').match(/\\d+\\s/)","query ? parseFloat(query[0]) : 0"]
         },
         "downloaded": {
           "selector": ["td.rowhead:contains('Downloaded') + td"],

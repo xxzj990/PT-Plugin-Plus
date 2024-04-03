@@ -73,6 +73,7 @@
 
       // 初始化说谢谢按钮
       this.initSayThanksButton();
+      if(document.domain.match("keepfrds.com")){$(".pt-plugin-body").css("z-index","39")}
     }
 
     /**
@@ -286,7 +287,9 @@
           title: option.title,
           savePath: savePath,
           autoStart: this.defaultClientOptions.autoStart,
-          link: option.link
+          tagIMDb: this.defaultClientOptions.tagIMDb,
+          link: option.link,
+          imdbId: option.imdbId
         })
           .then(result => {
             console.log("命令执行完成", result);
@@ -503,7 +506,8 @@
             {
               url,
               title,
-              link: this.currentURL
+              link: this.currentURL,
+              imdbId: this.getIMDbId ? this.getIMDbId() : null
             },
             event.originalEvent,
             success,
@@ -560,7 +564,8 @@
             this.sendTorrentToDefaultClient({
               url,
               title,
-              link: this.currentURL
+              link: this.currentURL,
+              imdbId: this.getIMDbId ? this.getIMDbId() : null
             })
               .then(() => {
                 success();
@@ -815,6 +820,13 @@
       let menus = [];
 
       items.forEach(item => {
+        if (!item) return
+        if (!item.client) return
+        if (!item.client.name) return
+        if (item.client.enabled === false) {
+          console.log(`skip disable client: ${item.client.name}`)
+          return
+        }
         if (item.client && item.client.name) {
           menus.push({
             title:
@@ -836,7 +848,9 @@
                   title: options.title,
                   savePath: item.path,
                   autoStart: item.client.autoStart,
-                  link: options.link
+                  tagIMDb: item.client.tagIMDb,
+                  link: options.link,
+                  imdbId: options.imdbId
                 })
                   .then(result => {
                     success();
@@ -1022,7 +1036,8 @@
             clientId: downloadOptions.client.id,
             url,
             savePath,
-            autoStart: downloadOptions.client.autoStart
+            autoStart: downloadOptions.client.autoStart,
+            tagIMDb: downloadOptions.client.tagIMDb
           });
         } else {
           items.push({
@@ -1090,7 +1105,9 @@
             url: url,
             title: "",
             savePath: downloadOptions.path,
-            autoStart: downloadOptions.client.autoStart
+            autoStart: downloadOptions.client.autoStart,
+            tagIMDb: downloadOptions.client.tagIMDb,
+            imdbId: downloadOptions.imdbId
           },
           false
         )
@@ -1179,6 +1196,13 @@
           });
         });
         clients.forEach(item => {
+          if (!item) return
+          if (!item.client) return
+          if (!item.client.name) return
+          if (item.client.enabled === false) {
+            console.log(`skip disable client: ${item.client.name}`)
+            return
+          }
           if (item.client && item.client.name) {
             addMenu(item);
 

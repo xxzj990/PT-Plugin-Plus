@@ -20,12 +20,12 @@
     _getDownloadUrlByPossibleHrefs() {
       const possibleHrefs = [
         // pthome
-        "a[href*='downhash'][href*='https']",
+        "a[href*='downhash'][href*='https'][class!='forward_a']",
         // hdchina
-        "a[href*='hash'][href*='https']",
+        "a[href*='hash'][href*='https'][class!='forward_a']",
         // misc
-        "a[href*='passkey'][href*='https']",
-        "a[href*='passkey']"
+        "a[href*='passkey'][href*='https'][class!='forward_a']",
+        "a[href*='passkey'][class!='forward_a']"
       ];
 
       for (const href of possibleHrefs) {
@@ -89,6 +89,30 @@
         return datas[1] || title;
       }
       return title;
+    }
+
+    /**
+     * 获取当前种子IMDb Id
+     */
+    getIMDbId() {
+      let url = window.location.href
+      let imdbId = null
+      try {
+        imdbId = PTService.getFieldValue('imdbId')
+        if (!imdbId) {
+          const link = $('a[href*=\'www.imdb.com/title/\']:first');
+          if (link.length > 0) {
+            let match = link.attr('href').match(/(tt\d+)/)
+            if (match && match.length >= 2) {
+              imdbId = match[1];
+            }
+          }
+        }
+      } catch (e) {
+        console.log(`${url} 获取IMDb Id 失败`, e)
+      }
+      console.log(imdbId)
+      return imdbId
     }
   }
   new App().init();

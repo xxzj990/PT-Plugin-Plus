@@ -3,7 +3,7 @@
     <MovieInfoCard
       :IMDbId="IMDbId"
       :doubanId="searchPayload.doubanId"
-      v-if="!!options.showMoiveInfoCardOnSearch"
+      v-if="!!options.showMovieInfoCardOnSearch"
     />
     <v-alert :value="true" type="info" style="padding:8px 16px;">
       {{ $t("searchTorrent.title") }} [{{ key }}], {{ searchMsg }}
@@ -300,6 +300,7 @@
               :label="$t('searchTorrent.filterSearchResults')"
               single-line
               hide-details
+              enterkeyhint="search"
             ></v-text-field>
           </div>
         </v-flex>
@@ -499,6 +500,13 @@
                     :label="$t('searchTorrent.showCategory')"
                     @change="updateViewOptions"
                   ></v-switch>
+                  <!-- 标题中间省略 -->
+                  <v-switch
+                    color="success"
+                    v-model="titleMiddleEllipsis"
+                    :label="$t('searchTorrent.titleMiddleEllipsis')"
+                    @change="updateViewOptions"
+                  ></v-switch>
                 </v-container>
               </v-card>
             </v-menu>
@@ -586,7 +594,36 @@
             >
               <img :src="props.item.site.icon" />
             </v-avatar>
+            <!--标题中间省略-->
+            <div
+             v-if="titleMiddleEllipsis && !$vuetify.breakpoint.xs"
+             class="titleWrap">
             <a
+              :href="props.item.link"
+              target="_blank"
+              v-html="props.item.titleHTML"
+              :title="props.item.title"
+              rel="noopener noreferrer nofollow"
+              :class="[
+                $vuetify.breakpoint.xs ? 'body-2' : 'subheading titleFull',
+                'font-weight-medium',
+              ]"
+            ></a>
+            <a
+              :href="props.item.link"
+              target="_blank"
+              v-html="props.item.titleHTML"
+              :title="'·title:'+props.item.title"
+              rel="noopener noreferrer nofollow"
+              :class="[
+                $vuetify.breakpoint.xs ? 'body-2' : 'subheading titleEllipsisMiddle',
+                'font-weight-medium',
+              ]"
+            ></a>
+            </div>
+
+             <a
+              v-else
               :href="props.item.link"
               target="_blank"
               v-html="props.item.titleHTML"
@@ -614,7 +651,7 @@
                 >{{ tag.name }}</span>
               </span>
 
-              <span v-if="props.item.subTitle">{{ props.item.subTitle }}</span>
+              <span v-if="props.item.subTitle" :title="props.item.subTitle">{{ props.item.subTitle }}</span>
             </div>
 
             <v-layout v-if="$vuetify.breakpoint.xs">
@@ -648,7 +685,7 @@
                   :downloadMethod="props.item.site.downloadMethod"
                   :isCollectioned="isCollectioned(props.item.link)"
                   :item="props.item"
-                  @copyLinkToClipboard="copyLinkToClipboard(props.item.url)"
+                  @copyLinkToClipboard="copyLinkToClipboard(props.item)"
                   @saveTorrentFile="saveTorrentFile(props.item)"
                   @addToCollection="addToCollection(props.item)"
                   @deleteCollection="deleteCollection(props.item)"
@@ -690,7 +727,7 @@
                 :downloadMethod="props.item.site.downloadMethod"
                 :isCollectioned="isCollectioned(props.item.link)"
                 :item="props.item"
-                @copyLinkToClipboard="copyLinkToClipboard(props.item.url)"
+                @copyLinkToClipboard="copyLinkToClipboard(props.item)"
                 @saveTorrentFile="saveTorrentFile(props.item)"
                 @addToCollection="addToCollection(props.item)"
                 @deleteCollection="deleteCollection(props.item)"

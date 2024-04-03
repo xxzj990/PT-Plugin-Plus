@@ -12,7 +12,8 @@ import {
   EPluginPosition,
   EWorkingStatus,
   EEncryptMode,
-  ETorrentStatus
+  ETorrentStatus,
+  ERequestType
 } from "./enum";
 
 /**
@@ -26,6 +27,7 @@ export interface ContextMenuRules {
 
 export interface DownloadClient {
   id?: string;
+  enabled?:boolean;
   name?: string;
   // oldName?: string;
   address?: string;
@@ -33,7 +35,22 @@ export interface DownloadClient {
   loginPwd?: string;
   paths?: any;
   autoStart?: boolean;
+  tagIMDb?: boolean;
   type?: string;
+  // 发送种子的时候发送分类
+  enableCategory?: boolean;
+  qbCategories?: QbCategory[];
+  hostnameAsTag?: boolean;
+  siteNameAsTag?: boolean;
+}
+
+/**
+ * qb 分类
+ */
+export interface QbCategory {
+  name: string;
+  // 不支持关键字
+  path: string;
 }
 
 /**
@@ -109,15 +126,28 @@ export interface Options {
   rowsPerPageItems?: any[];
   defaultSearchSolutionId?: string;
   searchSolutions?: SearchSolution[];
+  // 自动刷新用户数据
   autoRefreshUserData?: boolean;
+  // 使用 chrome.alarm 进行时间刷新
+  autoRefreshByAlarm?: boolean;
+  // 自动获取用户数据时间间隔（小时）
   autoRefreshUserDataHours?: number | string;
+  // 自动获取用户数据时间间隔（分钟）
   autoRefreshUserDataMinutes?: number | string;
+  // 下一次自动获取用户数据时间（ms）
   autoRefreshUserDataNextTime?: number;
+  // 上一次自动获取用户数据时间（ms）
   autoRefreshUserDataLastTime?: number;
   // 自动获取用户数据失败重试次数
   autoRefreshUserDataFailedRetryCount?: number;
   // 自动获取用户数据失败重试间隔时间（分钟）
   autoRefreshUserDataFailedRetryInterval?: number;
+  // 是否自动备份配置
+  autoBackupData?: boolean;
+  // 自动备份配置时间间隔（分钟）
+  // autoBackupDataMin?: number | string;
+  // 自动备份服务器
+  autoBackupDataServerId?: string;
   // 最近搜索的关键字
   lastSearchKey?: string;
   // 显示的用名名称
@@ -129,9 +159,11 @@ export interface Options {
   // 导航栏是否已打开
   navBarIsOpen?: boolean;
   // 在搜索时显示电影信息（搜索IMDb时有效）
-  showMoiveInfoCardOnSearch?: boolean;
+  showMovieInfoCardOnSearch?: boolean;
   // 在搜索之前一些选项配置
   beforeSearchingOptions?: BeforeSearching;
+  // 搜索方案切换的时候是否自动搜索
+  autoSearchWhenSwitchSolution?: boolean;
   // 在页面中显示工具栏
   showToolbarOnContentPage?: boolean;
   // 当前语言
@@ -164,6 +196,7 @@ export interface Options {
   encryptMode?: EEncryptMode;
   // 允许保存搜索结果快照
   allowSaveSnapshot?: boolean;
+  selectedTags?: string[];
 }
 
 // 在搜索之前一些选项配置
@@ -267,6 +300,76 @@ export interface Site {
   mergeSchemaTagSelectors?: boolean;
   // 消息提醒开关
   disableMessageCount?: boolean;
+  // 等级要求
+  levelRequirements?: LevelRequirement[];
+  // 上传限速 KB/s
+  upLoadLimit?: number;
+  // 启用快捷链接
+  enableQuickLink?: boolean;
+  // 启用默认快捷链接
+  enableDefaultQuickLink?: boolean;
+  userQuickLinks?: UserQuickLink[];
+  // 使用站点标签进行分组
+  // siteGroups?: string[];
+  // token in headers
+  authToken?: string
+}
+
+/**
+ * desc & href 都不为空才被认为是有效链接
+ * href 必须是网址
+ */
+export interface UserQuickLink {
+  desc: string;
+  href: string;
+  color?: string;
+}
+
+export interface LevelRequirement {
+  level?: number;
+  name?: string;
+  // 间隔要求
+  interval?: string;
+  // 日期要求
+  requiredDate?: string;
+  // 发布数要求
+  uploads?: number;
+  // 完成数要求
+  snatches?: number;
+  // 上传量要求
+  uploaded?: string | number;
+  // 下载量要求
+  downloaded?: string | number;
+  // 真实下载量
+  trueDownloaded?: string | number;
+  // 总流量
+  totalTraffic?: string | number;
+  // 积分要求
+  bonus?: number;
+  // 做种积分要求
+  seedingPoints?: number;
+  // 做种时间要求
+  seedingTime?: number;
+  // 平均保种时间要求
+  averageSeedtime?: number;
+  // 总保种时间要求
+  totalSeedtime?: number
+  // 保种体积要求
+  seedingSize?: string | number;
+  // 分享率要求
+  ratio?: number;
+  // 等级积分要求
+  classPoints?: number;
+  // 独特分组要求
+  uniqueGroups?: number;
+  // “完美”FLAC要求
+  perfectFLAC?: number;
+  // 论坛发帖要求
+  posts?: number;
+  // 权限
+  privilege?: string;
+  // 可选要求
+  alternative?: LevelRequirement[];
 }
 
 export interface Request {
@@ -298,9 +401,11 @@ export interface DownloadOptions {
   title?: string;
   savePath?: string;
   autoStart?: boolean;
+  tagIMDb?: boolean;
   clientId?: string;
   // 来源链接地址
   link?: string;
+  imdbId?: string;
 }
 
 /**
@@ -363,6 +468,7 @@ export interface SearchResultItem {
   // 状态
   status?: ETorrentStatus;
   host?: string;
+  imdbId?: string;
 }
 
 /**
@@ -377,6 +483,9 @@ export interface SearchEntryConfigArea {
   parseScript?: string;
   // 替换默认页面
   page?: string;
+  replaceKeyByTVDB?: string[];
+  convertToANIDB?: boolean;
+  requestData?: Dictionary<any>;
 }
 
 export interface ISearchFieldIndex {
@@ -435,6 +544,9 @@ export interface SearchEntryConfig {
   page: string;
   entry?: string;
   resultType?: ERequestResultType;
+  // don't encode the key, for some json post API. e.g. TNode
+  keepOriginKey?: boolean
+  requestDataType?: ERequestType;
   queryString?: string;
   parseScriptFile?: string;
   parseScript?: string;
@@ -447,6 +559,8 @@ export interface SearchEntryConfig {
   headers?: Dictionary<any>;
   // 跳过IMDb搜索
   skipIMDbId?: boolean;
+  // 跳过非拉丁字符搜索
+  skipNonLatinCharacters?: boolean;
   // 搜索解析字段索引
   fieldIndex?: ISearchFieldIndex;
   // 数据字段选择器
@@ -515,8 +629,16 @@ export interface UserInfo {
   name: string;
   // 上传量
   uploaded?: number;
+  // 发布数
+  uploads?: number;
   // 下载量
   downloaded?: number;
+  // 真实下载量
+  trueDownloaded?: string | number;
+  // 总流量
+  totalTraffic?: string | number;
+  // 完成数
+  snatches?: number;
   // 分享率
   ratio?: number;
   // 当前做种数量
@@ -531,8 +653,28 @@ export interface UserInfo {
   levelName?: string;
   // 魔力值/积分
   bonus?: number;
+  // 保种积分         //add by koal 220920
+  seedingPoints?: number;
+  // 做种时间要求
+  seedingTime?: number;
+  // 平均保种时间
+  averageSeedtime?: number;
+  // 总保种时间
+  totalSeedtime?: number;
+  // 时魔
+  bonusPerHour?: number;
+  // 积分页面
+  bonusPage?: string;
+  // H&R未达标页面
+  unsatisfiedsPage?: string;
   // 入站时间
   joinTime?: number;
+  // 等级积分
+  classPoints?: number;
+  // H&R未达标
+  unsatisfieds?: string | number;
+  // H&R预警
+  prewarn?: number;
   // 最后更新时间
   lastUpdateTime?: number;
   // 最后更新状态
@@ -549,6 +691,14 @@ export interface UserInfo {
   lastErrorMsg?: string;
   // 消息数量
   messageCount?: number;
+  // 独特分组
+  uniqueGroups?: number;
+  // “完美”FLAC
+  perfectFLAC?: number;
+  // 论坛发帖
+  posts?: number;
+  // 下一等级
+  nextLevels?: LevelRequirement[];
   [key: string]: any;
 }
 
@@ -596,6 +746,7 @@ export interface ICollection {
   size: number;
   time?: number;
   subTitle?: string;
+  imdbId?: string;
   movieInfo?: {
     title: string;
     alt_title: string;

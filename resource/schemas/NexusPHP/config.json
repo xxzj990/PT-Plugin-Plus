@@ -57,6 +57,9 @@
   }, {
     "name": "50%",
     "selector": "img.pro_50pctdown, .halfdown_bg, font.halfdown"
+  }, {
+    "name": "⛔️",
+    "selector": "span.tags.tjz, span.tag.tag-dz, span.tag.tag-limited"
   }],
   "selectors": {
     "userBaseInfo": {
@@ -76,7 +79,7 @@
           "filters": ["query.length>0"]
         },
         "messageCount": {
-          "selector": ["td[style*='background: red'] a[href*='messages.php']"],
+          "selector": ["td[style*='background: red'] a[href*='messages.php']", "div[style*='background: red'] a[href*='messages.php']"],
           "filters": ["query.text().match(/(\\d+)/)", "(query && query.length>=2)?parseInt(query[1]):0"]
         }
       }
@@ -94,15 +97,36 @@
         },
         "levelName": {
           "selector": ["td.rowhead:contains('等级')", "td.rowhead:contains('等級')", "td.rowhead:contains('Class')"],
-          "filters": ["query.next().find('img').attr('title')"]
+          "filters": ["query.next().find('img').attr('title')", "query.replace(/[^a-z0-9 ]/gi, '').trim().length > 0 ? query.replace(/[^a-z0-9 ]/gi, '').trim() : query"]
         },
         "bonus": {
-          "selector": ["td.rowhead:contains('魔力') + td", "td.rowhead:contains('Karma'):contains('Points') + td", "td.rowhead:contains('麦粒') + td", "td.rowfollow:contains('魔力值')"],
-          "filters": ["query.is(\":contains('魔力值:')\")?query.text().replace(/,/g,'').match(/魔力值.+?([\\d.]+)/)[1]:query.text().replace(/,/g,'')", "parseFloat(query)"]
+          "selector": ["td.rowhead:contains('魔力') + td", "td.rowhead:contains('Karma'):contains('Points') + td", "td.rowhead:contains('麦粒') + td", "td.rowfollow:contains('魔力值')", "td.rowhead:contains('bonus') + td"],
+          "filters": ["query.is(\":contains('魔力值:')\")||query.is(\":contains('Bonus Points:')\")?query.text().replace(/,/g,'').match(/(?:魔力值|Bonus Points).+?([\\d.]+)/)[1]:query.text().replace(/,/g,'')", "parseFloat(query)"]
+        },
+        "seedingPoints": {
+          "selector": ["td.rowhead:contains('做种积分') + td", "td.rowhead:contains('Seeding Points') + td", "td.rowhead:contains('做種積分') + td", "td.rowhead:contains('保种积分') + td", "td.rowfollow:contains('做种积分')", "td.rowfollow:contains('Seeding Points')", "td.rowfollow:contains('做種積分')"],
+          "filters": [
+            "query.text().replace(/,/g,'')",
+            "query.includes('做种积分') || query.includes('做種積分') || query.includes('Seeding Points') ? query.match(/(做种积分|做種積分|Seeding Points).+?[\\d.]+/g)[0] : query",
+            "query ? parseFloat(query.match(/[\\d.]+/)[0]) : null"]
         },
         "joinTime": {
           "selector": ["td.rowhead:contains('加入日期')", "td.rowhead:contains('Join'):contains('date')"],
-          "filters": ["query.next().text().split(' (')[0]", "dateTime(query).isValid()?dateTime(query).valueOf():query"]
+          "filters": ["query.next().text().split(' (')[0].trim()", "dateTime(query).isValid()?dateTime(query).valueOf():query"]
+        },
+        "unsatisfieds": {
+          "selector": ["a[href*='myhr.php']:last"],
+          "filters": ["query.length ? parseInt(query.text().match(/[\\d.]+/)[0]) : null"]
+        }
+      }
+    },
+    "bonusExtendInfo": {
+      "prerequisites": "!user.bonusPerHour",
+      "page": "/mybonus.php",
+      "fields": {
+        "bonusPerHour": {
+          "selector": ["#outer td[rowspan]", "div:contains('你当前每小时能获取'):last", "div:contains('You are currently getting'):last", "div:contains('你當前每小時能獲取'):last"],
+          "filters": ["parseFloat(query.text().replace(/,/g,'').match(/[\\d.]+/)[0])"]
         }
       }
     },
@@ -112,11 +136,21 @@
       "fields": {
         "seeding": {
           "selector": ["tr:not(:eq(0))"],
-          "filters": ["query.find('td.rowfollow:eq(2)').length"]
+          "filters": ["let l={}; query.each(function() { l[jQuery(this).find('td.rowfollow:eq(1) a').attr('href')] = jQuery(this).find('td.rowfollow:eq(2)').text(); }); Object.keys(l).length;"]
         },
         "seedingSize": {
           "selector": ["tr:not(:eq(0))"],
-          "filters": ["jQuery.map(query.find('td.rowfollow:eq(2)'), (item)=>{return $(item).text();})", "_self.getTotalSize(query)"]
+          "filters": ["let l={}; query.each(function() { l[jQuery(this).find('td.rowfollow:eq(1) a').attr('href')] = jQuery(this).find('td.rowfollow:eq(2)').text(); }); _self.getTotalSize(Object.values(l));"]
+        }
+      }
+    },
+    "userUploadedTorrents": {
+      "prerequisites": "!user.uploads",
+      "page": "/getusertorrentlistajax.php?userid=$user.id$&type=uploaded",
+      "fields": {
+        "uploads": {
+          "selector": ["b:first"],
+          "filters": ["query ? parseInt(query.text().trim().replace(/,/g,'')) : 0"]
         }
       }
     },
@@ -130,6 +164,18 @@
           "selector": ["a[href*='www.imdb.com/title/']:first"],
           "attribute": "href",
           "filters": ["query.match(/(tt\\d+)/)", "(query && query.length>=2)?query[1]:null"]
+        },
+        "sayThanksButton": {
+          "selector": ["input#saythanks:not(:disabled)"],
+          "filters": ["query"]
+        }
+      }
+    },
+    "/plugin_details.php": {
+      "fields": {
+        "size": {
+          "selector": ["td.rowtitle:contains('大小：'):first"],
+          "filters": ["query.next().text()", "(query && query.length>1)?query.sizeToNumber():0"]
         },
         "sayThanksButton": {
           "selector": ["input#saythanks:not(:disabled)"],

@@ -43,6 +43,9 @@
         },
         "levelName": {
           "selector": ["response.userstats.class"]
+        },
+        "bonusPerHour": {
+          "selector": ["response.userstats.bonusPointsPerHour", "response.userstats.seedingBonusPointsPerHour"]
         }
       }
     },
@@ -56,6 +59,21 @@
         },
         "seeding": {
           "selector": ["response.community.seeding"]
+        },
+        "uploads": {
+          "selector": ["response.community.uploaded"]
+        },
+        "downloads": {
+          "selector": ["response.community.snatched"]
+        },
+        "uniqueGroups": {
+          "selector": ["response.community.groups"]
+        },
+        "perfectFLAC": {
+          "selector": ["response.community.perfectFlacs"]
+        },
+        "posts": {
+          "selector": ["response.community.posts"]
         }
       }
     },

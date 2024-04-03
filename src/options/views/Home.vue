@@ -3,17 +3,26 @@
     <v-alert :value="true" type="info">{{ $t("home.title") }}</v-alert>
     <v-card>
       <v-card-title v-if="sites && sites.length > 0">
-        <v-btn color="success" @click="getInfos" :loading="loading" :title="$t('home.getInfos')">
+        <v-btn class="batchBtn" color="success" @click="getInfos" :loading="loading" :title="$t('home.getGroupInfos')">
           <v-icon class="mr-2">cached</v-icon>
-          {{ $t("home.getInfos") }}
+          {{ $t("home.getGroupInfos") }}
         </v-btn>
-        <v-btn to="/user-data-timeline" color="success" :title="$t('home.timeline')">
+        <v-btn class="batchBtn" to="/user-data-timeline" color="success" :title="$t('home.timeline')">
           <v-icon>timeline</v-icon>
         </v-btn>
 
-        <v-btn to="/statistic" color="success" :title="$t('home.statistic')">
+        <v-btn class="batchBtn" to="/statistic" color="success" :title="$t('home.statistic')">
           <v-icon>equalizer</v-icon>
         </v-btn>
+
+        <!--保留这个, 提醒用户有需要进一步处理的站点-->
+        <div v-for="tp of allOpenTypes">
+          <v-btn class="batchBtn" :color="tp.color" :title="$t(`home.${tp.type}`)"
+                 v-if="getAllUrlsByType(tp.type).length > 0" @click="openAllUrlsByType(tp.type)">
+            <!--@click="openAllUrlsByType(tp.type)">-->
+            <v-icon>{{ tp.icon }}</v-icon>
+          </v-btn>
+        </div>
 
         <v-menu :close-on-content-click="false" offset-y>
           <template v-slot:activator="{ on }">
@@ -24,80 +33,76 @@
 
           <v-card>
             <v-container grid-list-xs>
-              <v-switch
-                color="success"
-                v-model="showSiteName"
-                :label="$t('home.siteName')"
-                @change="updateViewOptions"
-              ></v-switch>
-              <v-switch
-                color="success"
-                v-model="showUserName"
-                :label="$t('home.userName')"
-                @change="updateViewOptions"
-              ></v-switch>
-              <v-switch
-                color="success"
-                v-model="showUserLevel"
-                :label="$t('home.userLevel')"
-                @change="updateViewOptions"
-              ></v-switch>
-
-              <v-switch
-                color="success"
-                v-model="showWeek"
-                :label="$t('home.week')"
-                @change="updateViewOptions"
-              ></v-switch>
+              <v-switch color="success" v-model="showSiteName" :label="$t('home.siteName')"
+                @change="updateViewOptions"></v-switch>
+              <v-switch color="success" v-model="showUserName" :label="$t('home.userName')"
+                @change="updateViewOptions"></v-switch>
+              <v-switch color="success" v-model="showUserLevel" :label="$t('home.userLevel')"
+                @change="updateViewOptions"></v-switch>
+              <v-switch color="success" v-model="showLevelRequirements" :label="$t('home.levelRequirements')"
+                @change="updateViewOptions"></v-switch>
+              <v-switch color="success" v-model="showWeek" :label="$t('home.week')"
+                @change="updateViewOptions"></v-switch>
+              <!--<v-switch color="success" v-model="showUserUploads" :label="$t('home.headers.uploads')"-->
+              <!--  @change="updateViewOptions"></v-switch>-->
+              <v-switch color="success" v-model="showSeedingPoints" :label="$t('home.seedingPoints')"
+                @change="updateViewOptions"></v-switch>
+              <v-switch color="success" v-model="showHnR" :label="$t('home.showHnR')"
+                @change="updateViewOptions"></v-switch>
+              <v-switch color="success" v-model="showLastUpdateTimeAsRelativeTime" :label="$t('home.showLastUpdateTimeAsRelativeTime')"
+                @change="updateViewOptions"></v-switch>
             </v-container>
           </v-card>
         </v-menu>
+        <v-select v-model="selectedHeaders" class="select" :items="headers" :label="$t('home.selectColumns')"
+          @change="updateViewOptions" multiple outlined return-object>
+          <template v-slot:selection="{ item, index }">
+            <v-chip v-if="index === 0">
+              <span>{{ item.text }}</span>
+            </v-chip>
+            <span v-if="index === 1" class="grey--text caption">(+{{ selectedHeaders.length - 1 }} others)</span>
+          </template>
+        </v-select>
+        <v-select v-model="selectedTags" class="select-tags" :items="allSortedTags" :label="$t('home.selectedTags')"
+                  :menu-props="{ maxHeight: '70%' }" @change="updateViewOptions"
+                  multiple outlined return-object>
+          <template v-slot:selection="{ item, index }">
+            <!--tag-->
+            <v-chip v-if="index === 0">
+              <!--<span>{{ selectedTags.length }} Tags</span>-->
+              <span>+{{ selectedTags.length }}</span>
+            </v-chip>
+            <!--&lt;!&ndash;(+12 others)&ndash;&gt;-->
+            <!--<span v-if="index === 1" class="grey&#45;&#45;text caption">(+{{ selectedTags.length - 1 }} others)</span>-->
+            <!--<span v-if="index === 0" class="grey&#45;&#45;text">({{ selectedTags.length }} Tags)</span>-->
+          </template>
+        </v-select>
 
         <!-- <AutoSignWarning /> -->
         <v-spacer></v-spacer>
 
-        <v-text-field
-          class="search"
-          v-model="filterKey"
-          append-icon="search"
-          label="Search"
-          single-line
-          hide-details
-        ></v-text-field>
+        <v-text-field class="search" v-model="filterKey" append-icon="search" label="Search" single-line hide-details
+          enterkeyhint="search"></v-text-field>
       </v-card-title>
 
-      <v-data-table
-        :search="filterKey"
-        :headers="headers"
-        :items="sites"
-        :pagination.sync="pagination"
-        item-key="host"
-        class="elevation-1"
-        ref="userDataTable"
-        :no-data-text="$t('home.nodata')"
-      >
+      <v-data-table :search="filterKey" :headers="showHeaders" :items="filteredSitesByTags" :pagination.sync="pagination"
+        item-key="host" class="elevation-1" ref="userDataTable" :no-data-text="$t('home.nodata')">
         <template slot="items" slot-scope="props">
           <!-- 站点 -->
-          <td class="center">
+          <td v-if="showColumn('name')" class="center">
             <v-badge color="red messageCount" overlap>
-              <template
-                v-slot:badge
-                v-if="!props.item.disableMessageCount && props.item.user.messageCount > 0"
-                :title="$t('home.newMessage')"
-              >
+              <template v-slot:badge v-if="
+                !props.item.disableMessageCount &&
+                props.item.user.messageCount > 0
+              " :title="$t('home.newMessage')">
                 {{
-                props.item.user.messageCount > 10
-                ? ""
-                : props.item.user.messageCount
+                    props.item.user.messageCount > 10
+                      ? ""
+                      : props.item.user.messageCount
                 }}
               </template>
-              <v-btn
-                flat
-                icon
-                class="siteIcon"
-                :title="$t('home.getInfos')"
-                @click.stop="getSiteUserInfo(props.item)"
-              >
+              <v-btn flat icon class="siteIcon" :title="$t('home.getInfos')" :disabled="props.item.offline"
+                @click.stop="getSiteUserInfo(props.item)">
                 <v-avatar :size="showSiteName ? 18 : 24">
                   <img :src="props.item.icon" />
                 </v-avatar>
@@ -105,19 +110,290 @@
             </v-badge>
 
             <br />
-            <a
-              :href="props.item.activeURL"
-              target="_blank"
-              rel="noopener noreferrer nofollow"
-              class="nodecoration"
-              v-if="showSiteName"
-            >
+            <a :href="props.item.activeURL" target="_blank" rel="noopener noreferrer nofollow" class="nodecoration"
+              v-if="showSiteName">
               <span class="caption">{{ props.item.name }}</span>
             </a>
           </td>
-          <td>{{ showUserName ? props.item.user.name : "****" }}</td>
-          <td>{{ showUserLevel ? props.item.user.levelName : "****" }}</td>
-          <td class="number">
+          <td v-if="showColumn('user.name')" :title="props.item.user.id">
+            <template v-if="showUserName">
+              {{ props.item.user.name }}
+            </template>
+            <template v-else> **** </template>
+            <v-card  v-if="props.item.enableQuickLink" class="userQuickLinks">
+                <template v-if="props.item.enableDefaultQuickLink">
+                  <template v-for="link of defaultQuickLinks(props.item)">
+                    <v-btn outline elevation="2" class="x-small" target="_blank"
+                           :color="link.color" :href="link.href" >{{ link.desc }}</v-btn>
+                  </template>
+                  <hr>
+                </template>
+                <!--点击后在新标签页打开-->
+                <template v-for="link of props.item.userQuickLinks">
+                  <v-btn outline elevation="2" class="x-small" target="_blank"
+                         :color="link.color" :href="link.href" >{{ link.desc }}</v-btn>
+                </template>
+            </v-card>
+          </td>
+          <td v-if="showColumn('user.levelName')">
+            <v-icon v-if="showLevelRequirements" small>military_tech</v-icon>
+            {{ showUserLevel ? props.item.user.levelName : "****" }}
+            <template v-if="showLevelRequirements">
+              <template v-if="props.item.levelRequirements">
+                <template v-if="isUserGroup(props.item) && isNotMaxUserLevel(props.item)
+                 && props.item.user.nextLevels && props.item.user.nextLevels.length > 0">
+                  <template v-for="nextLevel in props.item.user.nextLevels">
+                    <div>
+                      <v-icon small>keyboard_tab</v-icon>
+                      <template v-if="nextLevel.requiredDate">
+                        {{ nextLevel.requiredDate }}&nbsp;
+                      </template>
+                      <template v-if="nextLevel.uploaded">
+                        <v-icon small color="green darken-4">expand_less</v-icon>{{
+                            nextLevel.uploaded | formatSize
+                        }}&nbsp;
+                      </template>
+                      <template v-if="nextLevel.downloaded">
+                        <v-icon small color="red darken-4">expand_more</v-icon>{{
+                            nextLevel.downloaded | formatSize
+                        }}&nbsp;
+                      </template>
+                      <template v-if="nextLevel.trueDownloaded">
+                        {{ $t("home.levelRequirement.trueDownloaded") }}
+                        {{
+                            nextLevel.trueDownloaded | formatSize
+                        }}&nbsp;
+                      </template>
+                      <template v-if="nextLevel.totalTraffic">
+                        <v-icon small color="orange darken-4">swap_vert</v-icon>{{
+                            nextLevel.totalTraffic | formatSize
+                        }}&nbsp;
+                      </template>
+                      <template v-if="nextLevel.bonus">
+                        <v-icon small color="green darken-4">attach_money</v-icon>{{
+                            nextLevel.bonus | formatNumber
+                        }}&nbsp;
+                      </template>
+                      <template v-if="nextLevel.seedingSize">
+                        <v-icon small color="blue darken-4">dns</v-icon>{{
+                            nextLevel.seedingSize | formatSize
+                        }}&nbsp;
+                      </template>
+                      <template v-if="nextLevel.seedingPoints">
+                        <v-icon small color="green darken-4">energy_savings_leaf</v-icon>{{
+                            nextLevel.seedingPoints | formatNumber
+                        }}&nbsp;
+                      </template>
+                      <template v-if="nextLevel.seedingTime">
+                        <v-icon small color="green darken-4">timer</v-icon>{{
+                            nextLevel.seedingTime | formatNumber
+                        }}&nbsp;
+                      </template>
+                      <template v-if="nextLevel.averageSeedtime">
+                        <v-icon small color="green darken-4">timer</v-icon>{{
+                            nextLevel.averageSeedtime | formatNumber
+                        }}{{$t("home.levelRequirement.days")}}&nbsp;
+                      </template>
+                      <template v-if="nextLevel.totalSeedtime">
+                        <v-icon small color="green darken-4">timer</v-icon>{{
+                            nextLevel.totalSeedtime | formatNumber
+                        }}{{$t("home.levelRequirement.days")}}&nbsp;
+                      </template>
+                      <template v-if="nextLevel.uploads">
+                        <v-icon small color="green darken-4">file_upload</v-icon>{{ nextLevel.uploads
+                        }}&nbsp;
+                      </template>
+                      <template v-if="nextLevel.snatches">
+                        <v-icon small color="red darken-4">file_download</v-icon>{{ nextLevel.snatches
+                        }}&nbsp;
+                      </template>
+                      <template v-if="nextLevel.uniqueGroups">
+                        <v-icon small color="green darken-4">library_music</v-icon>{{ nextLevel.uniqueGroups
+                        }}&nbsp;
+                      </template>
+                      <template v-if="nextLevel.perfectFLAC">
+                        <v-icon small color="green darken-4">diamond</v-icon>{{ nextLevel.perfectFLAC
+                        }}&nbsp;
+                      </template>
+                      <template v-if="nextLevel.posts">
+                        <v-icon small color="green darken-4">post_add</v-icon>{{ nextLevel.posts
+                        }}&nbsp;
+                      </template>
+                      <template v-if="nextLevel.classPoints">
+                        <v-icon small color="yellow darken-4">energy_savings_leaf</v-icon>{{
+                            nextLevel.classPoints | formatNumber
+                        }}&nbsp;
+                      </template>
+                    </div>
+                  </template>
+                </template>
+                <template v-else-if="props.item.user.name">
+                  <v-icon small color="green darken-4">{{ getDoneIcon(props.item) }}</v-icon>
+                </template>
+                <v-card class="levelRequirement">
+                  <template v-for="levelRequirement of props.item.levelRequirements">
+                    <div>
+                      <v-icon v-if="!(props.item.user.nextLevels && props.item.user.nextLevels.length > 0) || Number(props.item.user.nextLevels[0].level) > Number(levelRequirement.level)"
+                        small color="green darken-4">done</v-icon>
+                      <v-icon v-else small color="red darken-4">block</v-icon>
+                      <template v-if="levelRequirement.requiredDate">
+                        {{ levelRequirement.requiredDate }} </template>({{ levelRequirement.name }}):
+                      <template v-if="levelRequirement.uploaded">
+                        <v-icon small color="green darken-4" :title="$t('home.levelRequirement.uploaded')">expand_less</v-icon>{{ levelRequirement.uploaded }};
+                      </template>
+                      <template v-if="levelRequirement.uploads">
+                        <v-icon small color="green darken-4" :title="$t('home.levelRequirement.uploads')">file_upload</v-icon>{{ levelRequirement.uploads }};
+                      </template>
+                      <template v-if="levelRequirement.snatches">
+                        <v-icon small color="red darken-4" :title="$t('home.levelRequirement.snatches')">file_download</v-icon>{{ levelRequirement.snatches }};
+                      </template>
+                      <template v-if="levelRequirement.downloaded">
+                        <v-icon small color="red darken-4" :title="$t('home.levelRequirement.downloaded')">expand_more</v-icon>{{ levelRequirement.downloaded }};
+                      </template>
+                      <template v-if="levelRequirement.trueDownloaded">
+                        {{ $t("home.levelRequirement.trueDownloaded") }}
+                        {{ levelRequirement.trueDownloaded }};
+                      </template>
+                      <template v-if="levelRequirement.totalTraffic">
+                        <v-icon small color="orange darken-4" :title="$t('home.levelRequirement.totalTraffic')">swap_vert</v-icon>{{ levelRequirement.totalTraffic }};
+                      </template>
+                      <template v-if="levelRequirement.ratio">
+                        <v-icon small color="orange darken-4" :title="$t('home.levelRequirement.ratio')">balance</v-icon>{{ levelRequirement.ratio }};
+                      </template>
+                      <template v-if="levelRequirement.bonus">
+                        <v-icon small color="green darken-4" :title="$t('home.levelRequirement.bonus')">attach_money</v-icon>{{ levelRequirement.bonus |
+                            formatInteger
+                        }};
+                      </template>
+                      <template v-if="levelRequirement.seedingSize">
+                        <v-icon small color="blue darken-4" :title="$t('home.levelRequirement.seedingSize')">dns</v-icon>{{ levelRequirement.seedingSize }};
+                      </template>
+                      <template v-if="levelRequirement.seedingPoints">
+                        <v-icon small color="green darken-4" :title="$t('home.levelRequirement.seedingPoints')">energy_savings_leaf</v-icon>{{ levelRequirement.seedingPoints
+                            | formatInteger
+                        }};
+                      </template>
+                      <template v-if="levelRequirement.seedingTime">
+                        <v-icon small color="green darken-4" :title="$t('home.levelRequirement.seedingTime')">timer</v-icon>{{ levelRequirement.seedingTime
+                            | formatInteger
+                        }};
+                      </template>
+                      <template v-if="levelRequirement.averageSeedtime">
+                        <v-icon small color="green darken-4" :title="$t('home.levelRequirement.averageSeedtime')">timer</v-icon>{{ levelRequirement.averageSeedtime
+                            | formatInteger
+                        }}{{$t("home.levelRequirement.days")}};
+                      </template>
+                      <template v-if="levelRequirement.totalSeedtime">
+                        <v-icon small color="green darken-4" :title="$t('home.levelRequirement.totalSeedtime')">timer</v-icon>{{ levelRequirement.totalSeedtime
+                            | formatInteger
+                        }}{{$t("home.levelRequirement.days")}};
+                      </template>
+                      <template v-if="levelRequirement.classPoints">
+                        <v-icon small color="yellow darken-4" :title="$t('home.levelRequirement.classPoints')">energy_savings_leaf</v-icon>{{ levelRequirement.classPoints
+                            | formatInteger
+                        }};
+                      </template>
+                      <template v-if="levelRequirement.uniqueGroups">
+                        <v-icon small color="green darken-4" :title="$t('home.levelRequirement.uniqueGroups')">library_music</v-icon>{{ levelRequirement.uniqueGroups
+                            | formatInteger
+                        }};
+                      </template>
+                      <template v-if="levelRequirement.perfectFLAC">
+                        <v-icon small color="green darken-4" :title="$t('home.levelRequirement.perfectFLAC')">diamond</v-icon>{{ levelRequirement.perfectFLAC
+                            | formatInteger
+                        }};
+                      </template>
+                      <template v-if="levelRequirement.posts">
+                        <v-icon small color="green darken-4" :title="$t('home.levelRequirement.posts')">post_add</v-icon>{{ levelRequirement.posts
+                            | formatInteger
+                        }};
+                      </template>
+                      <template v-if="levelRequirement.alternative">
+                        <v-icon small :title="$t('home.levelRequirement.alternative')">filter_1</v-icon>(
+                        <template v-for="option in levelRequirement.alternative">
+                          [<template v-if="option.requiredDate">
+                          {{ option.requiredDate }};
+                          </template>
+                          <template v-if="option.uploaded">
+                            <v-icon small color="green darken-4" :title="$t('home.levelRequirement.uploaded')">expand_less</v-icon>{{ option.uploaded }};
+                          </template>
+                          <template v-if="option.uploads">
+                            <v-icon small color="green darken-4" :title="$t('home.levelRequirement.uploads')">file_upload</v-icon>{{ option.uploads }};
+                          </template>
+                          <template v-if="option.snatches">
+                            <v-icon small color="red darken-4" :title="$t('home.levelRequirement.snatches')">file_download</v-icon>{{ option.snatches }};
+                          </template>
+                          <template v-if="option.downloaded">
+                            <v-icon small color="red darken-4" :title="$t('home.levelRequirement.downloaded')">expand_more</v-icon>{{ option.downloaded }};
+                          </template>
+                          <template v-if="option.trueDownloaded">
+                            {{ $t("home.levelRequirement.trueDownloaded") }}
+                            {{ option.trueDownloaded }};
+                          </template>
+                          <template v-if="option.totalTraffic">
+                            <v-icon small color="orange darken-4" :title="$t('home.levelRequirement.totalTraffic')">swap_vert</v-icon>{{ option.totalTraffic }};
+                          </template>
+                          <template v-if="option.ratio">
+                            <v-icon small color="orange darken-4" :title="$t('home.levelRequirement.ratio')">balance</v-icon>{{ option.ratio }};
+                          </template>
+                          <template v-if="option.bonus">
+                            <v-icon small color="green darken-4" :title="$t('home.levelRequirement.bonus')">attach_money</v-icon>{{ option.bonus |
+                                formatInteger
+                            }};
+                          </template>
+                          <template v-if="option.seedingSize">
+                            <v-icon small color="blue darken-4" :title="$t('home.levelRequirement.seedingSize')">dns</v-icon>{{ option.seedingSize }};
+                          </template>
+                          <template v-if="option.seedingPoints">
+                            <v-icon small color="green darken-4" :title="$t('home.levelRequirement.seedingPoints')">energy_savings_leaf</v-icon>{{ option.seedingPoints
+                                | formatInteger
+                            }};
+                          </template>
+                          <template v-if="option.seedingTime">
+                            <v-icon small color="green darken-4" :title="$t('home.levelRequirement.seedingTime')">timer</v-icon>{{ option.seedingTime
+                                | formatInteger
+                            }};
+                          </template>
+                          <template v-if="option.averageSeedtime">
+                            <v-icon small color="green darken-4" :title="$t('home.levelRequirement.averageSeedtime')">timer</v-icon>{{ option.averageSeedtime
+                                | formatInteger
+                            }}{{$t("home.levelRequirement.days")}};
+                          </template>
+                          <template v-if="option.totalSeedtime">
+                            <v-icon small color="green darken-4" :title="$t('home.levelRequirement.totalSeedtime')">timer</v-icon>{{ option.totalSeedtime
+                                | formatInteger
+                            }}{{$t("home.levelRequirement.days")}};
+                          </template>
+                          <template v-if="option.classPoints">
+                            <v-icon small color="yellow darken-4" :title="$t('home.levelRequirement.classPoints')">energy_savings_leaf</v-icon>{{ option.classPoints
+                                | formatInteger
+                            }};
+                          </template>
+                          <template v-if="option.uniqueGroups">
+                            <v-icon small color="green darken-4" :title="$t('home.levelRequirement.uniqueGroups')">library_music</v-icon>{{ option.uniqueGroups
+                                | formatInteger
+                            }};
+                          </template>
+                          <template v-if="option.perfectFLAC">
+                            <v-icon small color="green darken-4" :title="$t('home.levelRequirement.perfectFLAC')">diamond</v-icon>{{ option.perfectFLAC
+                                | formatInteger
+                            }};
+                          </template>
+                          <template v-if="option.posts">
+                            <v-icon small color="green darken-4" :title="$t('home.levelRequirement.posts')">post_add</v-icon>{{ option.posts
+                                | formatInteger
+                            }};
+                          </template>];
+                        </template>);
+                      </template>
+                      {{ levelRequirement.privilege }}
+                    </div>
+                  </template>
+                </v-card>
+              </template>
+            </template>
+          </td>
+          <td v-if="showColumn('user.uploaded')" class="number">
             <div>
               {{ props.item.user.uploaded | formatSize }}
               <v-icon small color="green darken-4">expand_less</v-icon>
@@ -127,47 +403,69 @@
               <v-icon small color="red darken-4">expand_more</v-icon>
             </div>
           </td>
-          <td class="number">{{ props.item.user.ratio | formatRatio }}</td>
-          <td class="number">{{ props.item.user.seeding }}</td>
-          <td class="number">{{ props.item.user.seedingSize | formatSize }}</td>
-          <td class="number">{{ props.item.user.bonus | formatNumber }}</td>
-          <td
-            class="number"
-            :title="props.item.user.joinDateTime"
-          >{{ props.item.user.joinTime | timeAgo(showWeek) }}</td>
-          <td class="number">
-            <v-btn
-              depressed
-              small
-              :to="`statistic/${props.item.host}`"
-              :title="$t('home.statistic')"
-            >{{ props.item.user.lastUpdateTime | formatDate('YYYY-MM-DD HH:mm:ss') }}</v-btn>
+          <td v-if="showColumn('user.ratio')" class="number">
+            {{ props.item.user.ratio | formatRatio }}
           </td>
-          <td class="center">
-            <v-progress-circular
-              indeterminate
-              :width="3"
-              size="30"
-              color="green"
-              v-if="props.item.user.isLoading"
-            >
-              <v-icon
-                v-if="props.item.user.isLoading"
-                @click="abortRequest(props.item)"
-                color="red"
-                small
-                :title="$t('home.cancelRequest')"
-              >cancel</v-icon>
+          <td v-if="showColumn('user.uploads')" class="number">
+            <!--{{ props.item.user.uploads === null ? 'NULL' : props.item.user.uploads === undefined ? 'N/A' : props.item.user.uploads === '' ? 'N-A' : props.item.user.uploads }}-->
+            <template>{{ props.item.user.uploads || 0 }}</template>
+          </td>
+          <td v-if="showColumn('user.seeding')" class="number">
+            <div>{{ props.item.user.seeding || 0 }}</div>
+            <div v-if="showHnR && props.item.user.unsatisfieds && props.item.user.unsatisfieds != 0" :title="$t('home.headers.unsatisfieds')" ><v-icon small color="yellow darken-4">warning</v-icon>{{props.item.user.unsatisfieds}}</div>
+          </td>
+          <td v-if="showColumn('user.seedingSize')" class="number">
+            {{ props.item.user.seedingSize | formatSize }}
+          </td>
+          <td v-if="showColumn('user.bonus')" class="number">
+            <template v-if="showSeedingPoints && props.item.user.seedingPoints">
+              <div>
+                <v-icon small color="green darken-4">attach_money</v-icon>{{ props.item.user.bonus | formatNumber }}
+              </div>
+              <div>
+                <v-icon small color="green darken-4">energy_savings_leaf</v-icon>{{ props.item.user.seedingPoints |
+                    formatNumber
+                }}
+              </div>
+            </template>
+            <template v-else-if="showSeedingPoints && props.item.user.classPoints">
+              <div>
+                <v-icon small color="green darken-4">attach_money</v-icon>{{ props.item.user.bonus | formatNumber }}
+              </div>
+              <div>
+                <v-icon small color="yellow darken-4">energy_savings_leaf</v-icon>{{ props.item.user.classPoints |
+                    formatNumber
+                }}
+              </div>
+            </template>
+            <template v-else>
+              {{ props.item.user.bonus | formatNumber }}
+            </template>
+          </td>
+          <td v-if="showColumn('user.bonusPerHour')" class="number">
+            <template v-if="props.item.user.bonusPerHour">
+              {{ props.item.user.bonusPerHour | formatNumber }}
+            </template>
+          </td>
+          <td v-if="showColumn('user.joinTime')" class="number" :title="props.item.user.joinDateTime">
+            {{ props.item.user.joinTime | timeAgo(showWeek) }}
+          </td>
+          <td v-if="showColumn('user.lastUpdateTime')" class="center">
+            <v-btn depressed small :to="`statistic/${props.item.host}`" :title="props.item.user.lastUpdateTime | formatDate('YYYY-MM-DD HH:mm:ss') + ' ' + $t('home.statistic')">
+                <template v-if="showLastUpdateTimeAsRelativeTime">{{ props.item.user.lastUpdateTime | timeAgo(false) }}</template>
+                <template v-else>{{ props.item.user.lastUpdateTime | formatDate('YYYY-MM-DD HH:mm:ss') }}</template>
+            </v-btn>
+          </td>
+          <td v-if="showColumn('user.lastUpdateStatus')" class="center">
+            <v-progress-circular indeterminate :width="3" size="30" color="green" v-if="props.item.user.isLoading">
+              <v-icon v-if="props.item.user.isLoading" @click="abortRequest(props.item)" color="red" small
+                :title="$t('home.cancelRequest')">cancel</v-icon>
             </v-progress-circular>
             <span v-else>
-              <a
-                :href="props.item.activeURL"
-                v-if="!props.item.user.isLogged"
-                target="_blank"
-                rel="noopener noreferrer nofollow"
-                class="nodecoration"
-              >{{ props.item.user.lastErrorMsg }}</a>
-              <span v-else>{{ props.item.user.lastErrorMsg }}</span>
+              <span v-if="props.item.offline">{{ $t("home.offline" )}}</span>
+              <a :href="props.item.activeURL" v-else-if="!props.item.user.isLogged" target="_blank"
+                rel="noopener noreferrer nofollow" class="nodecoration">{{ formatError(props.item.user) }}</a>
+              <span v-else>{{ formatError(props.item.user) }}</span>
             </span>
           </td>
         </template>
@@ -185,18 +483,22 @@ import Vue from "vue";
 import Extension from "@/service/extension";
 import {
   EAction,
-  Site,
-  LogItem,
   EModule,
+  EOpenType,
+  ETagType,
   EUserDataRequestStatus,
+  EViewKey,
+  LevelRequirement,
+  LogItem,
   Options,
+  Site,
   UserInfo,
-  EViewKey
+  UserQuickLink,
 } from "@/interface/common";
 import dayjs from "dayjs";
 
 import AutoSignWarning from "./AutoSignWarning.vue";
-import { PPF } from "@/service/public";
+import {PPF} from "@/service/public";
 
 interface UserInfoEx extends UserInfo {
   joinDateTime?: string;
@@ -205,14 +507,85 @@ interface UserInfoEx extends UserInfo {
 const extension = new Extension();
 export default Vue.extend({
   components: {
-    AutoSignWarning
+    AutoSignWarning,
   },
   data() {
     return {
       loading: false,
       items: [] as any[],
+      selectedHeaders: [] as any[],
+      selectedTags: [] as any[],
+      headers: [
+        {
+          text: this.$t("home.headers.site"),
+          align: "center",
+          value: "name",
+          width: "110px",
+        },
+        {
+          text: this.$t("home.headers.userName"),
+          align: "left",
+          value: "user.name",
+        },
+        {
+          text: this.$t("home.headers.levelName"),
+          align: "left",
+          value: "user.levelName",
+        },
+        {
+          text: this.$t("home.headers.activitiyData"),
+          align: "right",
+          value: "user.uploaded",
+          width: "120px",
+        },
+        {
+          text: this.$t("home.headers.ratio"),
+          align: "right",
+          value: "user.ratio",
+        },
+        {
+          text: this.$t("home.headers.uploads"),
+          align: "right",
+          value: "user.uploads",
+        },
+        {
+          text: this.$t("home.headers.seeding"),
+          align: "right",
+          value: "user.seeding",
+        },
+        {
+          text: this.$t("home.headers.seedingSize"),
+          align: "right",
+          value: "user.seedingSize",
+        },
+        {
+          text: this.$t("home.headers.bonus"),
+          align: "right",
+          value: "user.bonus",
+        },
+        {
+          text: this.$t("home.headers.bonusPerHour"),
+          align: "right",
+          value: "user.bonusPerHour",
+        },
+        {
+          text: this.$t("home.headers.joinTime"),
+          align: "right",
+          value: "user.joinTime",
+        },
+        {
+          text: this.$t("home.headers.lastUpdateTime"),
+          align: "center",
+          value: "user.lastUpdateTime",
+        },
+        {
+          text: this.$t("home.headers.status"),
+          align: "center",
+          value: "user.lastUpdateStatus",
+        },
+      ],
       pagination: {
-        rowsPerPage: -1
+        rowsPerPage: -1,
       },
       options: this.$store.state.options,
       beginTime: null as any,
@@ -226,11 +599,129 @@ export default Vue.extend({
       showUserName: true,
       showSiteName: true,
       showUserLevel: true,
-      showWeek: false
+      showLevelRequirements: true,
+      showSeedingPoints: true,
+      // showUserUploads: false,
+      showHnR: true,
+      showLastUpdateTimeAsRelativeTime:true,
+      showWeek: false,
     };
   },
   created() {
     this.init();
+  },
+  // DEBUG
+  // watch: {
+  //   selectedTags: {
+  //     handler(v) {
+  //       console.log("selectedTags changed", v);
+  //     },
+  //   },
+  // },
+  computed: {
+    //Done to get the ordered headers
+    showHeaders(): any[] {
+      return this.headers.filter((s) =>
+        this.selectedHeaders.map((sh) => sh.value).includes(s.value)
+      );
+    },
+    /**
+     * 其实也可以按站点进行分组, 目前简单按状态进行分组
+     */
+    allOpenTypes() {
+      return [
+        {type: EOpenType.openAllSites, icon: 'moving', color: 'secondary'},
+        {type: EOpenType.openAllUnReadMsg, icon: 'forward_to_inbox', color: 'primary'},
+        {type: EOpenType.openAllStatusErr, icon: 'sync_problem', color: 'error'},
+      ]
+    },
+    isSortByPriority() {
+      // @ts-ignore
+      return this.sites.filter(_ => _.priority).length > 0
+    },
+    /**
+     * 按优先级从小到大排序
+     */
+    allSitesSorted() {
+      // @ts-ignore
+      // return this.isSortByPriority ? this.sortByPriority(this.sites) : this.sites
+      return this.sortByPriority(this.sites)
+    },
+    allStatusErrSites() {
+      // @ts-ignore
+      return this.allSitesSorted
+          // 第一个一般是未登录
+          .filter((site: Site) => site.user?.lastErrorMsg || (site.user?.lastUpdateStatus !== EUserDataRequestStatus.success))
+    },
+    allUnReadMsgSites() {
+      // @ts-ignore
+      return this.allSitesSorted.filter((site: Site) => (site.user?.messageCount || 0) > 0)
+    },
+    allTaggedSites() {
+      // @ts-ignore
+      return this.allSitesSorted.filter(s => Array.isArray(s.tags) && s.tags.length > 0)
+    },
+    allUnTaggedSites() {
+      // @ts-ignore
+      return this.allSitesSorted.filter(s => !s.tags || s.tags.length === 0)
+    },
+    selectedTagValues() {
+      // @ts-ignore
+      return this.selectedTags.map((_: any) => _.value)
+    },
+    allSortedTags() {
+      // let res = [ETagType.all]
+      // if (this.allUnTaggedSites.length > 0) res.push(ETagType.unTagged)
+      // if (this.allUnReadMsgSites.length > 0) res.push(ETagType.unReadMsg)
+      // if (this.allStatusErrSites.length > 0) res.push(ETagType.statusError)
+      // 避免添加站点后, 刷新失败后, 标签反复横跳
+      let res = [ETagType.all, ETagType.unTagged, ETagType.unReadMsg, ETagType.statusError]
+      for (let site of this.allTaggedSites) {
+        res = res.concat(site.tags)
+      }
+      res = [...new Set(res)]
+      return res.map(tag => {
+        let text, value = tag
+        switch (tag) {
+          case ETagType.all:
+          case ETagType.unTagged:
+          case ETagType.unReadMsg:
+          case ETagType.statusError:
+            text = this.$t(`home.tags.${tag}`).toString()
+            break
+          default:
+            text = tag
+        }
+        return {text, value}
+      })
+    },
+    filteredSitesByTags() {
+      // @ts-ignore
+      if (this.selectedTagValues.length === 0) return this.sites
+      // @ts-ignore
+      if (this.selectedTagValues.includes(ETagType.all)) return this.sites
+      let tags = this.clone(this.selectedTagValues)
+      let res: any[] = []
+      if (tags.includes(ETagType.unTagged)) {
+        res = res.concat(this.allUnTaggedSites)
+      }
+      if (tags.includes(ETagType.unReadMsg)) {
+        res = res.concat(this.allUnReadMsgSites)
+      }
+      if (tags.includes(ETagType.statusError)) {
+        res = res.concat(this.allStatusErrSites)
+      }
+      for (let site of this.allTaggedSites) {
+        if (site.tags?.some((s: any) => tags.includes(s))) {
+          res.push(site)
+        }
+      }
+      // console.log(`filteredSitesByTags: ${tags}`, res)
+      res = this.uniqBy(res, 'name')
+      console.log(`filteredSitesByTags uniq: ${tags}`, res)
+      res = this.sortByPriority(res)
+      return res
+    },
   },
 
   /**
@@ -244,6 +735,14 @@ export default Vue.extend({
   },
 
   methods: {
+    showColumn(val: string) {
+      for (var header of this.headers.filter((s) =>
+        this.selectedHeaders.includes(s)
+      )) {
+        if (header.value === val) return true;
+      }
+      return false;
+    },
     resetSites() {
       this.sites = [];
       this.options.sites.forEach((site: Site) => {
@@ -254,7 +753,7 @@ export default Vue.extend({
               id: "",
               name: "",
               isLogged: false,
-              isLoading: false
+              isLoading: false,
             };
           } else {
             if (_site.user.isLoading === undefined) {
@@ -269,6 +768,8 @@ export default Vue.extend({
           this.sites.push(_site);
         }
       });
+      // 按优先级排序
+      this.sites = this.sortByPriority(this.sites)
     },
 
     init() {
@@ -284,28 +785,39 @@ export default Vue.extend({
         showUserName: true,
         showSiteName: true,
         showUserLevel: true,
-        showWeek: false
+        showLevelRequirements: true,
+        showSeedingPoints: true,
+        showHnR: true,
+        showLastUpdateTimeAsRelativeTime:true,
+        showWeek: false,
+        selectedHeaders: this.selectedHeaders,
       });
       Object.assign(this, viewOptions);
+      this.selectedHeaders = this.headers.filter((s) =>
+        this.selectedHeaders.map((sh) => sh.value).includes(s.value)
+      );
+      if (this.selectedHeaders.length == 0) {
+        this.selectedHeaders = Object.assign([], this.headers);
+      }
     },
     getInfos() {
       this.loading = true;
       this.beginTime = dayjs();
       this.writeLog({
         event: `Home.getUserInfo.Start`,
-        msg: this.$t("home.startGetting").toString()
+        msg: this.$t("home.startGetting").toString(),
       });
 
-      this.sites.forEach((site: Site, index: number) => {
+      this.filteredSitesByTags.forEach((site: Site, index: number) => {
         this.writeLog({
           event: `Home.getUserInfo.Processing`,
           msg: this.$t("home.gettingForSite", {
-            siteName: site.name
+            siteName: site.name,
           }).toString(),
           data: {
             host: site.host,
-            name: site.name
-          }
+            name: site.name,
+          },
         });
 
         this.getSiteUserInfo(site);
@@ -320,7 +832,7 @@ export default Vue.extend({
         module: EModule.options,
         event: options.event,
         msg: options.msg,
-        data: options.data
+        data: options.data,
       });
     },
 
@@ -331,22 +843,63 @@ export default Vue.extend({
       let index = this.requestQueue.findIndex((item: any) => {
         return item.host === site.host;
       });
+
       (site.user as any).isLoading = false;
       if (index !== -1) {
         this.requestQueue.splice(index, 1);
         if (this.requestQueue.length == 0) {
           this.requestMsg = this.$t("home.requestCompleted", {
-            second: dayjs().diff(this.beginTime, "second", true)
+            second: dayjs().diff(this.beginTime, "second", true),
           }).toString();
           this.loading = false;
           this.writeLog({
             event: `Home.getUserInfo.Finished`,
-            msg: this.requestMsg
+            msg: this.requestMsg,
           });
           // 重置站点信息，因为有时候加载完成后，某些行还显示正在加载，暂时未明是哪里问题
           this.sites = this.clone(this.sites);
         }
       }
+    },
+    /**
+     * 等级名称有中英文之分，没法直接区分
+     */
+    getUserLevelGroup(site: Site) {
+      let userLevel = site.user?.levelName?.toLowerCase()
+      let specialNames = {
+        manager: 'admin,moderator,sys,retire,uploader,管理,版主,发种,保种,上传,退休'.split(/[,，]/ig),
+        vip: 'vip,贵宾'.split(/[,，]/ig),
+      }
+      specialNames.manager = specialNames.manager.filter(_ => !!_)
+      specialNames.vip = specialNames.vip.filter(_ => !!_)
+      let res = 'user'
+      for (let k in specialNames) {
+        // @ts-ignore
+        let levelNames = specialNames[k]
+        if (levelNames.some((n: string) => userLevel?.includes(n))) {
+          res = k
+          break
+        }
+      }
+      return res
+    },
+    getDoneIcon(site: Site) {
+      const icons = {manager: 'manage_accounts', vip: 'verified', user: 'done'}
+      // @ts-ignore
+      return icons[this.getUserLevelGroup(site)] || icons.user
+    },
+    isUserGroup(site: Site) {
+      return this.getUserLevelGroup(site) === 'user'
+    },
+    /**
+     * 适用于站点更改等级规则后, 显示距离下一等级的条件
+     * 因为有些站点可能改了等级名称, 所以这里只做简单的判断是否为 NM. 可以将 config.json 里面的数据同步修改
+     * 因为如果没有达到 NM, 还是需要升级滴~
+     */
+    isNotMaxUserLevel(site: Site) {
+      let maxLevel = site.levelRequirements?.slice(-1)[0]?.name,
+          userLevel = site.user?.levelName
+      return maxLevel?.toLowerCase() !== userLevel?.toLowerCase()
     },
     /**
      * 格式化一些用户信息
@@ -367,12 +920,317 @@ export default Vue.extend({
       user.joinTime = PPF.transformTime(user.joinTime, site.timezoneOffset);
 
       user.joinDateTime = dayjs(user.joinTime).format("YYYY-MM-DD HH:mm:ss");
+
+      // 设置升级条件
+      try {
+        if (site.levelRequirements) {
+          for (var levelRequirement of site.levelRequirements) {
+            if (levelRequirement.requiredDate) break;
+
+            if (levelRequirement.interval && user.joinDateTime) {
+              levelRequirement.requiredDate = this.getRequiredDate(levelRequirement.interval, user.joinDateTime).format("YYYY-MM-DD");
+            } else break;
+          }
+
+          user.nextLevels = [] as LevelRequirement[];
+          let userLevel = -1;
+          for (var levelRequirement of site.levelRequirements) {
+            if (user.levelName?.trim()?.toUpperCase() == levelRequirement.name?.trim()?.toUpperCase())
+            {
+              userLevel = Number(levelRequirement.level);
+              break;
+            }
+          }
+
+          for (var levelRequirement of site.levelRequirements) {
+            if (Number(levelRequirement.level) < userLevel)
+              continue;
+
+            if (levelRequirement.alternative) {
+              for (var option of levelRequirement.alternative) {
+                var newLevelRequirement = Object.assign({}, levelRequirement)
+                for(var key of Object.keys(option) as Array<keyof LevelRequirement>) {{
+                    if (option[key])
+                      newLevelRequirement[key] = option[key] as any
+                  }
+                }
+                // console.log(newLevelRequirement)
+                var nextLevel = this.calculateNextLeve(user, newLevelRequirement);
+                if (nextLevel) {
+                  //console.log(nextLevel)
+                  //console.log(user.uploads)
+                  user.nextLevels.push(nextLevel);
+                } else {
+                  user.nextLevels = [] as LevelRequirement[];
+                  break;
+                }
+              }
+
+              if (user.nextLevels.length)
+                  break;
+            } else {
+              let nextLevel = this.calculateNextLeve(user, levelRequirement);
+              if (nextLevel) {
+                if (user.nextLevels.length) {
+                  continue
+                }
+                user.nextLevels.push(nextLevel);
+                break;
+              } else {
+                user.nextLevels = []
+              }
+            }
+          }
+        }
+      } catch(error) {
+        console.log(error);
+      }
+    },
+    /**
+     * @return {LevelRequirement}
+     */
+    calculateNextLeve(user: UserInfoEx, levelRequirement: LevelRequirement): LevelRequirement | undefined {
+      let nextLevel = {} as LevelRequirement;
+      nextLevel.level = -1;
+
+      let downloaded = user.downloaded ?? 0;
+      let uploaded = user.uploaded ?? 0;
+
+      if (user.levelName?.toLowerCase() == levelRequirement.name?.toLowerCase()) {
+        return undefined;
+      }
+
+      if (levelRequirement.interval && user.joinDateTime) {
+        let requiredDate = this.getRequiredDate(levelRequirement.interval, user.joinDateTime);
+        if (dayjs(new Date()).isBefore(requiredDate)) {
+          nextLevel.requiredDate = requiredDate.format("YYYY-MM-DD");
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+
+      if (levelRequirement.uploaded || levelRequirement.ratio) {
+        let levelRequirementUploaded = levelRequirement.uploaded ? this.fileSizetoLength(levelRequirement.uploaded as string) : 0;
+        let requiredDownloaded = levelRequirement.downloaded ? this.fileSizetoLength(levelRequirement.downloaded as string) : 0;
+        let requiredUploadedbyRatio = Math.max(downloaded, requiredDownloaded) * (levelRequirement.ratio ?? 0);
+        let requiredUploaded = Math.max(levelRequirementUploaded, requiredUploadedbyRatio);
+        if (uploaded < requiredUploaded) {
+          nextLevel.uploaded = requiredUploaded - uploaded;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+
+      if (levelRequirement.downloaded) {
+        let requiredDownloaded = this.fileSizetoLength(levelRequirement.downloaded as string);
+        if (downloaded < requiredDownloaded) {
+          nextLevel.downloaded = requiredDownloaded - downloaded;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+
+      if (levelRequirement.ratio) {
+        let userRatio = user.ratio as number;
+        let requiredRatio = levelRequirement.ratio as number;
+        if (userRatio != -1 && userRatio < requiredRatio) {
+          nextLevel.ratio = levelRequirement.ratio;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+
+      if (levelRequirement.bonus) {
+        let userBonus = user.bonus as number;
+        let requiredBonus = levelRequirement.bonus as number;
+
+        if (userBonus < requiredBonus) {
+          nextLevel.bonus = requiredBonus - userBonus;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+
+      if (levelRequirement.seedingPoints) {
+        let userSeedingPoints = user.seedingPoints as number;
+        let requiredSeedingPoints = levelRequirement.seedingPoints as number;
+        if (userSeedingPoints < requiredSeedingPoints) {
+          nextLevel.seedingPoints = requiredSeedingPoints - userSeedingPoints;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+
+      if (levelRequirement.seedingSize) {
+        let requiredSeedingSize = this.fileSizetoLength(levelRequirement.seedingSize as string);
+        let userSeedingSize = user.seedingSize ? user.seedingSize : 0 ;
+        if (userSeedingSize < requiredSeedingSize) {
+          nextLevel.seedingSize = requiredSeedingSize - userSeedingSize;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+
+      if (levelRequirement.seedingTime) {
+        let userSeedingTime = user.seedingTime as number;
+        let requiredSeedingTime = levelRequirement.seedingTime as number;
+        if (userSeedingTime < requiredSeedingTime) {
+          nextLevel.seedingTime = requiredSeedingTime - userSeedingTime;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+
+      if (levelRequirement.averageSeedtime) {
+        let userAverageSeedtime = user.averageSeedtime as number;
+        let requiredAverageSeedtime = levelRequirement.averageSeedtime as number;
+        if (userAverageSeedtime < requiredAverageSeedtime) {
+          nextLevel.averageSeedtime = requiredAverageSeedtime - userAverageSeedtime;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+      if (levelRequirement.totalSeedtime) {
+        let usertotalSeedtime = user.totalSeedtime as number;
+        let requiredtotalSeedtime = levelRequirement.totalSeedtime as number;
+        if (usertotalSeedtime < requiredtotalSeedtime) {
+          nextLevel.totalSeedtime = requiredtotalSeedtime - usertotalSeedtime;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+
+      if (levelRequirement.uploads) {
+        let userUploads = user.uploads ? user.uploads as number : 0;
+        let requiredUploads = levelRequirement.uploads as number;
+        if (userUploads < requiredUploads) {
+          nextLevel.uploads = requiredUploads - userUploads;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+      if (levelRequirement.snatches) {
+        let userSnatches = user.snatches ? user.snatches as number : 0;
+        let requiredSnatches = levelRequirement.snatches as number;
+        if (userSnatches < requiredSnatches) {
+          nextLevel.snatches = requiredSnatches - userSnatches;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+
+      if (levelRequirement.trueDownloaded) {
+        let userTrueDownloaded = user.trueDownloaded ? (user.trueDownloaded as number) : 0;
+        let requiredTrueDownloaded = this.fileSizetoLength(
+          levelRequirement.trueDownloaded as string
+        );
+        if (userTrueDownloaded < requiredTrueDownloaded) {
+          nextLevel.trueDownloaded = requiredTrueDownloaded - userTrueDownloaded;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+      if (levelRequirement.totalTraffic) {
+        let userTotalTraffic = user.totalTraffic ? (user.totalTraffic as number) : 0;
+        let requiredTotalTraffic = this.fileSizetoLength(
+          levelRequirement.totalTraffic as string
+        );
+        if (userTotalTraffic < requiredTotalTraffic) {
+          nextLevel.totalTraffic = requiredTotalTraffic - userTotalTraffic;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+      if (levelRequirement.classPoints) {
+        let userClassPoints = user.classPoints as number;
+        let requiredClassPoints = levelRequirement.classPoints as number;
+        if (userClassPoints < requiredClassPoints) {
+          nextLevel.classPoints = requiredClassPoints - userClassPoints;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+
+      if (levelRequirement.uniqueGroups) {
+        let userUniqueGroups = user.uniqueGroups as number;
+        let requiredUniqueGroups = levelRequirement.uniqueGroups as number;
+        if (userUniqueGroups < requiredUniqueGroups) {
+          nextLevel.uniqueGroups = requiredUniqueGroups - userUniqueGroups;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+
+      if (levelRequirement.perfectFLAC) {
+        let userPerfectFLAC = user.perfectFLAC as number;
+        let requiredPerfectFLAC = levelRequirement.perfectFLAC as number;
+        if (userPerfectFLAC < requiredPerfectFLAC) {
+          nextLevel.perfectFLAC = requiredPerfectFLAC - userPerfectFLAC;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+
+      if (levelRequirement.posts) {
+        let userPosts = user.posts as number;
+        let requiredPosts = levelRequirement.posts as number;
+        if (userPosts < requiredPosts) {
+          nextLevel.posts = requiredPosts - userPosts;
+          nextLevel.level = levelRequirement.level;
+        }
+      }
+
+      if ((nextLevel.level as number) > 0)
+      {
+        nextLevel.name = levelRequirement.name;
+        return nextLevel;
+      } else
+        return undefined;
+    },
+    /**
+     * @return {number}
+     */
+    fileSizetoLength(size: string | number): number {
+      if (typeof size == "number") {
+        return size;
+      }
+      let _size_raw_match = size
+        .replace(/,/g, "")
+        .trim()
+        .match(/^(\d*\.?\d+)(.*[^ZEPTGMK])?([ZEPTGMK](B|iB))$/i);
+      if (_size_raw_match) {
+        let _size_num = parseFloat(_size_raw_match[1]);
+        let _size_type = _size_raw_match[3];
+        switch (true) {
+          case /Zi?B/i.test(_size_type):
+            return _size_num * Math.pow(2, 70);
+          case /Ei?B/i.test(_size_type):
+            return _size_num * Math.pow(2, 60);
+          case /Pi?B/i.test(_size_type):
+            return _size_num * Math.pow(2, 50);
+          case /Ti?B/i.test(_size_type):
+            return _size_num * Math.pow(2, 40);
+          case /Gi?B/i.test(_size_type):
+            return _size_num * Math.pow(2, 30);
+          case /Mi?B/i.test(_size_type):
+            return _size_num * Math.pow(2, 20);
+          case /Ki?B/i.test(_size_type):
+            return _size_num * Math.pow(2, 10);
+          default:
+            return _size_num;
+        }
+      }
+      return 0;
+    },
+    /**
+     * @return {dayjs.Dayjs}
+     */
+     getRequiredDate(interval: string, joinDateTime: string) : dayjs.Dayjs {
+      let unit = "week";
+      switch (interval.replace(/[^A-Za-z]/g, ""))
+      {
+        case "D":
+          unit = "day";
+          break;
+        case "M":
+          unit = "month";
+          break;
+        case "Y":
+          unit = "year";
+          break;
+      }
+      let num = interval.replace(/\D/g,'');
+      return dayjs(joinDateTime).add(parseInt(num), unit as dayjs.ManipulateType);
     },
     /**
      * 获取站点用户信息
      */
     getSiteUserInfo(site: Site) {
-      if (!site.user) {
+      // fix issue #1065, 注意此处直接return在无站点更新时会导致刷新按钮一直处于loading状态，暂不修
+      if (!site.user || site.offline) {
         return;
       }
 
@@ -391,7 +1249,7 @@ export default Vue.extend({
             this.formatUserInfo(user, site);
           }
         })
-        .catch(result => {
+        .catch((result) => {
           console.log("error", result);
           if (result.msg && result.msg.status) {
             user.lastErrorMsg = result.msg.msg;
@@ -413,16 +1271,16 @@ export default Vue.extend({
           this.writeLog({
             event: `Home.getUserInfo.Abort`,
             msg: this.$t("home.getUserInfoAbort", {
-              siteName: site.name
-            }).toString()
+              siteName: site.name,
+            }).toString(),
           });
         })
         .catch(() => {
           this.writeLog({
             event: `Home.getUserInfo.Abort.Error`,
             msg: this.$t("home.getUserInfoAbortError", {
-              siteName: site.name
-            }).toString()
+              siteName: site.name,
+            }).toString(),
           });
           this.removeQueue(site);
         });
@@ -435,6 +1293,32 @@ export default Vue.extend({
     clone(source: any) {
       return JSON.parse(JSON.stringify(source));
     },
+    uniqBy(arr: any[], predicate: any) {
+      const cb = typeof predicate === 'function' ? predicate : (o: any) => o[predicate];
+
+      return [...arr.reduce((map, item) => {
+        const key = (item === null || item === undefined) ?
+            item : cb(item);
+
+        map.has(key) || map.set(key, item);
+
+        return map;
+      }, new Map()).values()];
+    },
+    filterOnlineSites(arr: any[]) {
+      return arr.filter(s => s.offline !== true)
+    },
+    // 按优先级排序
+    sortByPriority(arr: any[]) {
+      if (this.isSortByPriority) {
+        return arr.sort((a, b) => {
+          // 兼容部分未设置优先级的站点
+          return (a.priority || Number.MAX_SAFE_INTEGER) - (b.priority || Number.MAX_SAFE_INTEGER)
+        })
+      } else {
+        return arr
+      }
+    },
 
     updateViewOptions() {
       this.$store.dispatch("updateViewOptions", {
@@ -443,9 +1327,130 @@ export default Vue.extend({
           showUserName: this.showUserName,
           showSiteName: this.showSiteName,
           showUserLevel: this.showUserLevel,
-          showWeek: this.showWeek
-        }
+          showLevelRequirements: this.showLevelRequirements,
+          showSeedingPoints: this.showSeedingPoints,
+          // showUserUploads: this.showUserUploads,
+          showHnR: this.showHnR,
+          showLastUpdateTimeAsRelativeTime: this.showLastUpdateTimeAsRelativeTime,
+          showWeek: this.showWeek,
+          selectedHeaders: this.selectedHeaders,
+          selectedTags: this.selectedTags,
+        },
       });
+    },
+
+    formatError(user: any) {
+      if (user.lastErrorMsg) {
+        return user.lastErrorMsg;
+      }
+      if (
+        user.lastUpdateStatus &&
+        user.lastUpdateStatus !== EUserDataRequestStatus.success
+      ) {
+        return this.$t(`service.user.${user.lastUpdateStatus}`);
+      }
+      return "";
+    },
+    openAllUrlsByType: function (type: String) {
+      let urls = this.getAllUrlsByType(type)
+      console.log(`try open ${urls.length} tabs...`, urls)
+      for (let i = 0; i < urls.length; i++){
+        const u = urls[i];
+        // @ts-ignore
+        window.open(u);
+      }
+    },
+    getAllUrlsByType: function (type: String) {
+      switch (type) {
+        case EOpenType.openAllSites:
+          return this.filterOnlineSites(this.filteredSitesByTags)
+              .map((site: Site) => site.activeURL)
+        case EOpenType.openAllStatusErr:
+          // 只打开有效站点
+          return this.filterOnlineSites(this.allStatusErrSites)
+              .map((site: Site) => this.defaultQuickLinks(site)[0] || site.activeURL)
+              .map((s: any) => s.href || s)
+        case EOpenType.openAllUnReadMsg:
+          return this.filterOnlineSites(this.allUnReadMsgSites)
+              .map((site: Site) => this.defaultQuickLinks(site)[1] || site.activeURL)
+              .map((s: any) => s.href || s)
+        default:
+          throw new Error(`getAllUrlsByType: 未知的类型：${type}`)
+      }
+    },
+    defaultQuickLinks: function (site: Site): UserQuickLink[] {
+      let uid = site.user?.id, uname = site.user?.name
+      let links: UserQuickLink[] = []
+      // 确保第一条和第二条记录是 用户详情和邮箱/站内信 的网址
+      switch (site.schema) {
+        // from jpop
+        case 'Gazelle':
+          links = [
+            {color: 'primary', desc: `${uname}(${uid})`, href: `/user.php?id=${uid}`},
+            {color: 'success', desc: this.$t("home.mailbox").toString(), href: `/inbox.php`},
+            {color: 'success', desc: this.$t("home.torrents").toString(), href: `/torrents.php`},
+            {color: 'primary', desc: this.$t("home.control_panel").toString(), href: `/user.php?action=edit&userid=${uid}`},
+            // {color: 'primary', desc: this.$t("home.security").toString(), href: `/user.php?action=edit&userid=${uid}#paranoia_settings`},
+            // {color: 'primary', desc: this.$t("home.2FA").toString(), href: `/user.php?action=edit&userid=${uid}#access_settings`},
+          ]
+          break
+        // from GPW
+        case 'GazelleJSONAPI':
+          links = [
+            {color: 'primary', desc: `${uname}(${uid})`, href: `/user.php?id=${uid}`},
+            {color: 'success', desc: this.$t("home.mailbox").toString(), href: `/inbox.php`},
+            {color: 'success', desc: this.$t("home.torrents").toString(), href: `/torrents.php`},
+            {color: 'primary', desc: this.$t("home.control_panel").toString(), href: `/user.php?action=edit&userid=${uid}`},
+            {color: 'primary', desc: this.$t("home.security").toString(), href: `/user.php?action=edit&userid=${uid}#paranoia_settings`},
+            // {color: 'primary', desc: this.$t("home.2FA").toString(), href: `/user.php?action=edit&userid=${uid}#access_settings`},
+          ]
+          break
+        // from 观众
+        case 'NexusPHP':
+          links = [
+            {color: 'primary', desc: `${uname}(${uid})`, href: `/userdetails.php?id=${uid}`},
+            {color: 'success', desc: this.$t("home.mailbox").toString(), href: `/messages.php`},
+            {color: 'success', desc: this.$t("home.torrents").toString(), href: `/torrents.php`},
+            {color: 'primary', desc: this.$t("home.control_panel").toString(), href: `/usercp.php`},
+            {color: 'primary', desc: this.$t("home.security").toString(), href: `/usercp.php?action=security`},
+            // {color: 'primary', desc: this.$t("home.2FA").toString(), href: `/usercp.php?action=secAuth`},
+          ]
+          break
+        // from zhuque
+        case 'TNode':
+          links = [
+            {color: 'primary', desc: `${uname}(${uid})`, href: `/user/info`},
+            {color: 'success', desc: this.$t("home.mailbox").toString(), href: `/message/system`},
+            {color: 'success', desc: this.$t("home.torrents").toString(), href: `/torrent/list/`},
+            {color: 'primary', desc: this.$t("home.control_panel").toString(), href: `/user/setting`},
+          ]
+          break
+        case 'TTG':
+          links = [
+            {color: 'primary', desc: `${uname}(${uid})`, href: `/userdetails.php?id=${uid}`},
+            {color: 'success', desc: this.$t("home.mailbox").toString(), href: `/messages.php`},
+            {color: 'success', desc: this.$t("home.torrents").toString(), href: `/browse.php`},
+            {color: 'primary', desc: this.$t("home.control_panel").toString(), href: `/my.php`},
+            // {color: 'primary', desc: this.$t("home.2FA").toString(), href: `/mystep.php`},
+          ]
+          break
+        case 'mTorrent':
+          links = [
+            {color: 'primary', desc: `${uname}(${uid})`, href: `/profile/detail/${uid}`},
+            {color: 'success', desc: this.$t("home.mailbox").toString(), href: `/message/1`},
+            {color: 'success', desc: this.$t("home.torrents").toString(), href: `/browse`},
+            {color: 'primary', desc: this.$t("home.control_panel").toString(), href: `/usercp?tab=home`},
+            {color: 'primary', desc: this.$t("home.security").toString(), href: `/usercp?tab=security`},
+          ]
+          break
+        case 'Discuz':
+        case 'UNIT3D':
+        default:
+          console.log(`un-support schema for quickLinks: ${site.schema}`)
+          break
+      }
+      links = links.map(i => ({...i, href: new URL(i.href, site.activeURL).toString()}))
+      return links
     }
   },
 
@@ -459,73 +1464,14 @@ export default Vue.extend({
         return "";
       }
       return number.toFixed(2);
-    }
+    },
   },
-
-  computed: {
-    headers(): Array<any> {
-      return [
-        {
-          text: this.$t("home.headers.site"),
-          align: "center",
-          value: "name",
-          width: "110px"
-        },
-        {
-          text: this.$t("home.headers.userName"),
-          align: "left",
-          value: "user.name"
-        },
-        {
-          text: this.$t("home.headers.levelName"),
-          align: "left",
-          value: "user.levelName"
-        },
-        {
-          text: this.$t("home.headers.activitiyData"),
-          align: "right",
-          value: "user.uploaded",
-          width: "120px"
-        },
-        {
-          text: this.$t("home.headers.ratio"),
-          align: "right",
-          value: "user.ratio"
-        },
-        {
-          text: this.$t("home.headers.seeding"),
-          align: "right",
-          value: "user.seeding"
-        },
-        {
-          text: this.$t("home.headers.seedingSize"),
-          align: "right",
-          value: "user.seedingSize"
-        },
-        {
-          text: this.$t("home.headers.bonus"),
-          align: "right",
-          value: "user.bonus"
-        },
-        {
-          text: this.$t("home.headers.joinTime"),
-          align: "right",
-          value: "user.joinTime"
-        },
-        {
-          text: this.$t("home.headers.lastUpdateTime"),
-          align: "right",
-          value: "user.lastUpdateTime"
-        },
-        { text: this.$t("home.headers.status"), align: "center", value: "" }
-      ];
-    }
-  }
 });
 </script>
 
 <style lang="scss">
 .home {
+
   table.v-table thead tr:not(.v-datatable__progress) th,
   table.v-table tbody tr td {
     padding: 5px !important;
@@ -535,6 +1481,7 @@ export default Vue.extend({
   .center {
     text-align: center;
   }
+
   .number {
     text-align: right;
   }
@@ -555,6 +1502,55 @@ export default Vue.extend({
     margin: 0;
     height: 30px;
     width: 30px;
+  }
+
+  td:hover div.userQuickLinks {
+    display: block;
+  }
+
+  .userQuickLinks {
+    position: absolute;
+    display: none;
+    z-index: 999;
+    border: 1px solid;
+    max-width: 50%;
+    min-width: 405px;
+  }
+
+  .x-small {
+    height: 20px;
+    min-width: 36px;
+    padding: 0 8.8888888889px;
+    margin: 5px;
+  }
+
+  td:hover div.levelRequirement {
+    display: block;
+  }
+
+  .levelRequirement {
+    position: absolute;
+    display: none;
+    z-index: 999;
+    border: 1px solid;
+  }
+
+  .select {
+    max-width: 160px;
+  }
+  .select-tags {
+    max-width: 70px;
+    max-height: 70%;
+    margin-left: 5px;
+  }
+
+  .lastUpdateTime {
+    margin-right: 0;
+  }
+
+  .batchBtn {
+    min-width: 60px;
+    margin: 3px 3px;
   }
 }
 </style>
